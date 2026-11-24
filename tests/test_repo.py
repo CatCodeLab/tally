@@ -65,3 +65,14 @@ def test_withdrawals_settings_processed_counts(conn):
     assert is_processed(conn, "h")
     add_entry(conn, mk(status="needs_review"))
     assert count_by_status(conn, "needs_review") == 1
+
+
+def test_list_and_delete_withdrawals(conn):
+    from tally.repo import Withdrawal, add_withdrawal, delete_withdrawal, list_withdrawals
+    a = add_withdrawal(conn, date(2026, 11, 2), 5000)
+    b = add_withdrawal(conn, date(2026, 11, 9), 2000)
+    add_withdrawal(conn, date(2026, 10, 9), 999)
+    got = list_withdrawals(conn, date(2026, 11, 1), date(2026, 11, 30))
+    assert got == [Withdrawal(b, date(2026, 11, 9), 2000), Withdrawal(a, date(2026, 11, 2), 5000)]
+    delete_withdrawal(conn, a)
+    assert [w.id for w in list_withdrawals(conn, date(2026, 11, 1), date(2026, 11, 30))] == [b]

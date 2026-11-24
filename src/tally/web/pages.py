@@ -122,6 +122,10 @@ def register_pages(app: FastAPI, cfg: Config, templates) -> None:
             lang = get_lang(conn)
             r, active, category, shop, link = view_state(request, conn)
             tab = request.query_params.get("status")
+            if tab == "withdrawals":
+                return render(request, conn, "entries.html", rows=[], tab=tab, link=link,
+                              range_label=range_label(r, lang),
+                              withdrawals=repo.list_withdrawals(conn, r.start, r.end))
             tab = tab if tab in STATUS_TABS else None
             if tab == "review":  # the review queue ignores the date range
                 f = Filters(date.min, date.max, category, shop, STATUS_TABS[tab])

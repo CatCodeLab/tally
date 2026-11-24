@@ -30,6 +30,13 @@ class Entry:
 
 
 @dataclass
+class Withdrawal:
+    id: int
+    date: date
+    amount_cents: int
+
+
+@dataclass
 class Filters:
     start: date
     end: date
@@ -123,6 +130,18 @@ def add_withdrawal(conn, d: date, cents: int) -> int:
                        (d.isoformat(), cents))
     conn.commit()
     return cur.lastrowid
+
+
+def list_withdrawals(conn, start: date, end: date) -> list[Withdrawal]:
+    rows = conn.execute("SELECT id, date, amount_cents FROM withdrawals "
+                        "WHERE date >= ? AND date <= ? ORDER BY date DESC, id DESC",
+                        (start.isoformat(), end.isoformat()))
+    return [Withdrawal(r["id"], date.fromisoformat(r["date"]), r["amount_cents"]) for r in rows]
+
+
+def delete_withdrawal(conn, id: int) -> None:
+    conn.execute("DELETE FROM withdrawals WHERE id = ?", (id,))
+    conn.commit()
 
 
 def sum_withdrawals(conn, start: date, end: date) -> int:

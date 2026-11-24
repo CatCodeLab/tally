@@ -5,8 +5,27 @@
   <a class="chip {{ 'on' if not tab }}" href="{{ link('/entries') }}">{{ t('filter_all') }}</a>
   <a class="chip {{ 'on' if tab == 'review' }}" href="{{ link('/entries', status='review') }}">{{ t('filter_review') }}</a>
   <a class="chip {{ 'on' if tab == 'card' }}" href="{{ link('/entries', status='card') }}">{{ t('filter_card') }}</a>
+  <a class="chip {{ 'on' if tab == 'withdrawals' }}" href="{{ link('/entries', status='withdrawals') }}">{{ t('filter_withdrawals') }}</a>
   <a class="chip" href="/">{{ t('nav_overview') }}</a>
 </div>
+{% if tab == 'withdrawals' %}
+<table class="entries">
+  {% for w in withdrawals %}
+  <tr>
+    <td>{{ w.date.isoformat() }}</td>
+    <td>{{ t('withdrawal') }}</td>
+    <td class="amt">{{ money(w.amount_cents) }}</td>
+    <td><form method="post" action="/withdrawals/{{ w.id }}/delete" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ here }}">
+      <button class="danger">{{ t('delete') }}</button>
+    </form></td>
+  </tr>
+  {% else %}
+  <tr><td class="muted">{{ t('no_withdrawals') }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
 <table class="entries">
   {% for e, cat in rows %}
   <tr>
@@ -21,4 +40,5 @@
   <tr><td class="muted">{{ t('no_entries') }}</td></tr>
   {% endfor %}
 </table>
+{% endif %}
 {% endblock %}

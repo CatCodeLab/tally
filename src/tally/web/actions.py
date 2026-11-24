@@ -106,6 +106,13 @@ def register_actions(app: FastAPI, cfg: Config, llm: LLMClient) -> None:
                 flash(conn, "flash_withdrawal")
             return see_other(safe_next(next, "/"))
 
+    @app.post("/withdrawals/{withdrawal_id}/delete", dependencies=guard)
+    def delete_withdrawal(withdrawal_id: int, next: str = Form("/entries?status=withdrawals")):
+        with session(cfg) as conn:
+            repo.delete_withdrawal(conn, withdrawal_id)
+            flash(conn, "flash_deleted")
+            return see_other(safe_next(next, "/entries?status=withdrawals"))
+
     @app.post("/scan", dependencies=guard)
     def scan(next: str = Form("/")):
         with session(cfg) as conn:

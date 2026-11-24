@@ -320,3 +320,18 @@ def test_filtered_overview_notes_unfiltered_cash_figures(dash, conn):
     assert "All categories and shops" in dash.get("/?shop=B").text
     dash.post("/lang", data={"lang": "zh", "csrf": csrf(dash)})
     assert "全部类别和商家" in dash.get("/?category=food").text
+
+
+def test_withdrawals_tab_lists_and_deletes(dash, conn):
+    wid = repo.add_withdrawal(conn, TODAY, 4321)
+    repo.add_withdrawal(conn, date(2019, 1, 1), 777)
+    html = dash.get("/entries?status=withdrawals").text
+    assert "$43.21" in html and "$7.77" not in html
+    assert f'action="/withdrawals/{wid}/delete"' in html
+    assert 'href="/entries?preset=this_month&amp;status=withdrawals"' in dash.get("/entries").text
+    assert dash.post(f"/withdrawals/{wid}/delete").status_code == 403  # CSRF
+    r = post(dash, f"/withdrawals/{wid}/delete")
+    assert r.status_code == 303 and r.headers["location"] == "/entries?status=withdrawals"
+    assert repo.sum_withdrawals(conn, TODAY, TODAY) == 0
+    dash.post("/lang", data={"lang": "zh", "csrf": csrf(dash)})
+    assert "取现记录" in dash.get("/entries?status=withdrawals").text
