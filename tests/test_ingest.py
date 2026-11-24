@@ -203,3 +203,36 @@ def test_failure_on_second_page_rolls_back_first(env):
     assert entries(env.conn) == []
     assert env.conn.execute("SELECT COUNT(*) FROM processed_files").fetchone()[0] == 0
     assert (env.cfg.inbox / "r.pdf").exists()
+
+
+def two_page_pdf(env):
+    pages = [Image.new("RGB", (20, 20), c) for c in ("white", "black")]
+    (env.cfg.inbox / "a.png").unlink()
+    pages[0].save(env.cfg.inbox / "r.pdf", save_all=True, append_images=pages[1:])
+
+
+def test_no_open_transaction_during_ocr_or_llm(env):
+    two_page_pdf(env)
+    seen = []
+
+    class SpyLLM(FakeLLM):
+        def extract_receipt(self, text, categories=None):
+            seen.append(("llm", env.conn.in_transaction))
+            return super().extract_receipt(text, categories)
+
+    def ocr(img):
+        seen.append(("ocr", env.conn.in_transaction))
+        return "12.50 3.00"
+
+    r = scan_inbox(env.conn, env.cfg, SpyLLM([ok_fields(), ok_fields(shop="B", total="3.00")]),
+                   ocr=ocr, today=D)
+    assert r.added == 2 and not r.errors
+    assert seen == [("ocr", False), ("llm", False), ("ocr", False), ("llm", False)]
+    assert not env.conn.in_transaction
+
+
+def test_duplicate_pages_within_one_file_flagged(env):
+    two_page_pdf(env)
+    r = run(env, [ok_fields(), ok_fields()])
+    assert sorted(e.status for e in entries(env.conn)) == ["ok", "suspected_duplicate"]
+    assert (r.added, r.review) == (1, 1)

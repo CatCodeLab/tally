@@ -43,7 +43,15 @@ def _failed_entry(reason: str, today: date, image_path: str, text: str) -> repo.
                       image_path=image_path, ocr_text=text)
 
 
-def _build_entry(conn, llm: LLMClient, text: str, image_path: str, today: date) -> repo.Entry:
+def _is_duplicate(conn, shop: str, d: date, cents: int, pending: list[repo.Entry]) -> bool:
+    """Against counted entries in the DB and earlier pages of this file (not yet stored)."""
+    return repo.find_duplicate(conn, shop, d, cents) is not None or any(
+        p.shop == shop and p.date == d and p.amount_cents == cents
+        and p.status in ("ok", "needs_review") for p in pending)
+
+
+def _build_entry(conn, llm: LLMClient, text: str, image_path: str, today: date,
+                 pending: list[repo.Entry]) -> repo.Entry:
     if not text.strip():
         return _failed_entry("no_total", today, image_path, text)
     try:
@@ -61,7 +69,7 @@ def _build_entry(conn, llm: LLMClient, text: str, image_path: str, today: date) 
 
     if f.payment_method == "card":
         e.status = "card_skipped"
-    elif shop and cents and repo.find_duplicate(conn, shop, e.date, cents):
+    elif shop and cents and _is_duplicate(conn, shop, e.date, cents, pending):
         e.status = "suspected_duplicate"
     else:
         reason = None
@@ -87,16 +95,18 @@ def _process_file(conn, cfg: Config, llm: LLMClient, ocr, path: Path, h: str,
     out_dir = cfg.archive / f"{today:%Y}" / f"{today:%m}"
     out_dir.mkdir(parents=True, exist_ok=True)
     saved: list[Path] = []
-    counts = {"ok": 0, "needs_review": 0, "suspected_duplicate": 0, "card_skipped": 0}
+    built: list[repo.Entry] = []
     try:
+        # Slow work first (render, OCR, LLM) with no write transaction open...
         for i, page in enumerate(load_pages(path)):
             png = out_dir / f"{h[:16]}-p{i}.png"
             page.save(png, format="PNG")
             saved.append(png)
             text = ocr(page)
-            e = _build_entry(conn, llm, text, str(png), today)
+            built.append(_build_entry(conn, llm, text, str(png), today, built))
+        # ...then one short transaction for the whole file.
+        for e in built:
             repo.add_entry(conn, e, commit=False)
-            counts[e.status] += 1
         repo.mark_processed(conn, h, path.name, commit=False)
         conn.commit()
     except BaseException:
@@ -104,6 +114,9 @@ def _process_file(conn, cfg: Config, llm: LLMClient, ocr, path: Path, h: str,
         for p in saved:
             p.unlink(missing_ok=True)
         raise
+    counts = {"ok": 0, "needs_review": 0, "suspected_duplicate": 0, "card_skipped": 0}
+    for e in built:
+        counts[e.status] += 1
     res.added += counts["ok"]
     res.review += counts["needs_review"] + counts["suspected_duplicate"]
     res.card += counts["card_skipped"]
