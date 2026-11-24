@@ -2,17 +2,12 @@ from datetime import date
 
 import pytest
 
+from helpers import mk
+
 from tally.repo import (DuplicateClientId, Entry, Filters, add_entry, add_withdrawal,
                         confirmed_category, count_by_status, find_duplicate, get_entry,
                         get_setting, is_processed, list_entries, mark_processed,
                         remember_shop_category, set_setting, sum_withdrawals, update_entry)
-
-
-def mk(**kw):
-    base = dict(id=None, source="manual", shop="S", date=date(2026, 11, 1),
-                amount_cents=100, category="other", status="ok")
-    base.update(kw)
-    return Entry(**base)
 
 
 def test_add_and_filter(conn):
