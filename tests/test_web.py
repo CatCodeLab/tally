@@ -351,3 +351,9 @@ def test_suspected_duplicate_page_links_match(dash, conn):
     post(dash, f"/entries/{dup}", shop="Deli", date=TODAY.isoformat(), amount="12.50",
          category="other")
     assert get_entry(conn, dup).status == "ok"
+
+
+def test_no_inline_styles_in_templates():
+    # CSP has no 'unsafe-inline' for styles, so style= attributes would be ignored.
+    for p in (WEB / "templates").glob("*.html"):
+        assert not re.search(r"\sstyle\s*=", p.read_text()), p

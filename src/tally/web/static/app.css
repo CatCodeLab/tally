@@ -50,3 +50,4 @@ td.amt{text-align:right;font-variant-numeric:tabular-nums}
 .detail .media img{max-width:360px;max-height:520px;border:1px solid var(--line)}
 .kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px}
 .kv dd{margin:0;word-break:break-all}
+pre.guide{white-space:pre-wrap}
