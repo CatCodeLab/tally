@@ -1,6 +1,9 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+from pydantic import ValidationError
+
 from tally.llm import ExtractionError, UtteranceFields
 from tally.repo import name_entry_shop, remember_shop_category
 from tally.voice import handle_voice_batch
@@ -85,10 +88,6 @@ def test_no_coordinates_stored_on_entry(conn):
     handle_voice_batch(conn, NoLLM(), [item("5", lat=2.0, lon=2.0)], "en")
     cols = [c[1] for c in conn.execute("PRAGMA table_info(entries)")]
     assert "lat" not in cols and "lon" not in cols
-
-
-import pytest  # noqa: E402
-from pydantic import ValidationError  # noqa: E402
 
 
 @pytest.mark.parametrize("lat,lon", [(91, 0), (-91, 0), (0, 181), (0, -181),

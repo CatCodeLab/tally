@@ -1,4 +1,7 @@
-"""LAN voice endpoint: token-protected POST /api/voice, nothing else."""
+"""LAN voice endpoint: token-protected POST /api/voice, nothing else.
+
+Request bodies are capped at 256 KB (413 beyond that); clients should split large batches.
+"""
 import secrets
 
 from fastapi import FastAPI, Request

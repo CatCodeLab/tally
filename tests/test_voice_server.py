@@ -1,7 +1,11 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from datetime import date
+from decimal import Decimal
+
 from helpers import NoLLM, FakeLLM
+from tally.llm import UtteranceFields
 from tally import repo
 from tally.voice_server import create_voice_app
 
@@ -38,7 +42,17 @@ def test_rejects_without_token(client, token):
         assert r.status_code == 401 and token not in r.text
 
 
-def test_records_batch(client, token):
+def test_records_batch(tmp_config, token):
+    fields = lambda shop, amt: UtteranceFields(  # noqa: E731
+        shop=shop, amount=Decimal(amt), date=date(2026, 11, 24), category="food")
+    c = TestClient(create_voice_app(tmp_config, FakeLLM([fields("Deli", "5"), fields("Cafe", "6")])))
+    r = c.post("/api/voice", json={"items": [it("a", "Deli 5"), it("b", "Cafe 6")]},
+               headers=auth(token))
+    assert r.status_code == 200 and [x["status"] for x in r.json()["results"]] == ["recorded", "recorded"]
+    assert r.json()["say"].endswith("(+1 synced)")
+
+
+def test_review_batch_counts_synced(client, token):
     r = client.post("/api/voice", json={"items": [ITEM_A, ITEM_B]}, headers=auth(token))
     assert r.status_code == 200 and [x["status"] for x in r.json()["results"]] == ["review", "review"]
     assert r.json()["say"].endswith("(+1 synced)")
@@ -101,3 +115,11 @@ def test_body_too_large(client, token):
     assert r.status_code == 413
     r = client.post("/api/voice", content=b"x" * (300 * 1024))
     assert r.status_code == 401
+
+
+def test_streamed_body_cap_without_content_length(client, token):
+    def gen():
+        for _ in range(30):
+            yield b"x" * 10240
+    r = client.post("/api/voice", content=gen(), headers=auth(token))
+    assert r.status_code == 413
