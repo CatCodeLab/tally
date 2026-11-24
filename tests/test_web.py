@@ -293,3 +293,18 @@ def test_concurrent_scan_refused(dash):
     finally:
         actions._scan_lock.release()
     assert "already running" in dash.get("/").text
+
+
+def test_pairing_guide_escaped_and_host_checked(dash):
+    r = dash.get("/pairing/guide")
+    assert r.status_code == 200
+    assert "<pre" in r.text and "Authorization" in r.text
+    assert "<name>.local" not in r.text and "&lt;name&gt;.local" in r.text
+    assert dash.get("/pairing/guide", headers={"Host": "evil.example"}).status_code == 400
+    assert 'href="/pairing/guide"' in dash.get("/pairing").text
+
+
+def test_packaged_guide_matches_docs():
+    root = Path(__file__).resolve().parents[1]
+    assert (root / "docs/shortcut-setup.md").read_text() == \
+        (root / "src/tally/web/guide/shortcut-setup.md").read_text()

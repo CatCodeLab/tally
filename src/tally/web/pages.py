@@ -166,3 +166,10 @@ def register_pages(app: FastAPI, cfg: Config, templates) -> None:
             return render(request, conn, "pairing.html", host=host, port=cfg.voice_port,
                           token=repo.get_or_create_token(conn),
                           ssid=repo.get_setting(conn, "home_ssid", "") or "")
+
+    @app.get("/pairing/guide", response_class=HTMLResponse)
+    def pairing_guide(request: Request):
+        # Packaged copy only, rendered as escaped text by Jinja autoescape.
+        guide = (Path(__file__).parent / "guide" / "shortcut-setup.md").read_text(encoding="utf-8")
+        with session(cfg) as conn:
+            return render(request, conn, "guide.html", guide=guide)
