@@ -164,8 +164,20 @@ def test_name_clash_in_archive(env):
     run(env, [ok_fields()])
     put_png(env.cfg.inbox, color=(0, 255, 0))
     run(env, [ok_fields(shop="Other")])
-    names = sorted(p.name for p in env.cfg.archive.glob("*.png"))
+    month = env.cfg.archive / "2026" / "11"
+    names = sorted(p.name for p in month.glob("*.png"))
     assert "a.png" in names and "a-1.png" in names
+    assert list(env.cfg.archive.glob("*.png")) == []  # nothing at the archive root
+
+
+def test_original_archived_next_to_its_pages(env):
+    run(env, [ok_fields()])
+    month = env.cfg.archive / "2026" / "11"
+    assert (month / "a.png").is_file()
+    assert only_entry(env.conn).image_path.startswith(str(month))
+    put_png(env.cfg.inbox)  # already seen: still archived by scan date
+    run(env, [])
+    assert (month / "a-1.png").is_file()
 
 
 def test_scan_aborts_when_llm_down(env):

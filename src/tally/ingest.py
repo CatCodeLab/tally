@@ -90,10 +90,8 @@ def _build_entry(conn, llm: LLMClient, text: str, image_path: str, today: date,
     return e
 
 
-def _process_file(conn, cfg: Config, llm: LLMClient, ocr, path: Path, h: str,
+def _process_file(conn, llm: LLMClient, ocr, path: Path, h: str, out_dir: Path,
                   today: date, res: ScanResult) -> None:
-    out_dir = cfg.archive / f"{today:%Y}" / f"{today:%m}"
-    out_dir.mkdir(parents=True, exist_ok=True)
     saved: list[Path] = []
     built: list[repo.Entry] = []
     try:
@@ -128,16 +126,19 @@ def scan_inbox(conn, cfg: Config, llm: LLMClient,
     llm.health()  # LLMUnavailable propagates before anything is touched
     today = today or date.today()
     res = ScanResult()
+    out_dir = cfg.archive / f"{today:%Y}" / f"{today:%m}"  # pages and originals, by scan date
     files = sorted((p for p in cfg.inbox.iterdir()
                     if p.is_file() and p.suffix.lower() in SUPPORTED), key=lambda p: p.name)
+    if files:
+        out_dir.mkdir(parents=True, exist_ok=True)
     for path in files:
         try:
             h = hashlib.sha256(path.read_bytes()).hexdigest()
             if repo.is_processed(conn, h):
                 res.skipped_files += 1
             else:
-                _process_file(conn, cfg, llm, ocr, path, h, today, res)
-            shutil.move(str(path), _unique_dest(cfg.archive, path.name))
+                _process_file(conn, llm, ocr, path, h, out_dir, today, res)
+            shutil.move(str(path), _unique_dest(out_dir, path.name))
         except Exception as ex:
             res.errors.append(f"{path.name}: {ex}")
     return res
