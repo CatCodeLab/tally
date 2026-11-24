@@ -95,3 +95,33 @@ def test_no_coordinates_stored_on_entry(conn):
 def test_voice_item_rejects_bad_coords(lat, lon):
     with pytest.raises(ValidationError):
         item("1", lat=lat, lon=lon)
+
+
+def test_correcting_place_filled_shop_teaches_place(conn):
+    [r] = handle_voice_batch(conn, NoLLM(), [item("40", lat=5.0, lon=5.0)], "en")
+    e = by_client_id(conn, r.id)
+    assert e.reason == "unknown_place"
+    name_entry_shop(conn, e.id, "Corner Deli")
+    [r2] = handle_voice_batch(conn, NoLLM(), [item("12", id="u2", lat=5.0, lon=5.0)], "en")
+    e2 = by_client_id(conn, r2.id)
+    assert (e2.shop, e2.status) == ("Corner Deli", "ok")
+    name_entry_shop(conn, e2.id, "Corner Deli & Co")
+    [r3] = handle_voice_batch(conn, NoLLM(), [item("5", id="u3", lat=5.0, lon=5.0)], "en")
+    assert by_client_id(conn, r3.id).shop == "Corner Deli & Co"
+
+
+def test_rename_does_not_steal_place_named_otherwise(conn):
+    pid = add_place(conn, "Bakery", 6.0, 6.0)
+    conn.execute("INSERT INTO entries(source, shop, date, place_id) "
+                 "VALUES ('manual', 'Typo', '2026-11-24', ?)", (pid,))
+    eid = conn.execute("SELECT id FROM entries").fetchone()[0]
+    name_entry_shop(conn, eid, "Fixed")
+    assert conn.execute("SELECT shop FROM places WHERE id = ?", (pid,)).fetchone()[0] == "Bakery"
+
+
+def test_two_amount_only_at_unnamed_point_reuse_one_place(conn):
+    handle_voice_batch(conn, NoLLM(), [item("4", id="a", lat=7.0, lon=7.0),
+                                       item("6", id="b", lat=7.0, lon=7.0)], "en")
+    rows = conn.execute("SELECT id, shop, visits FROM places").fetchall()
+    assert [(r["shop"], r["visits"]) for r in rows] == [(None, 2)]
+    assert by_client_id(conn, "a").place_id == by_client_id(conn, "b").place_id == rows[0]["id"]

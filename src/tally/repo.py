@@ -206,8 +206,13 @@ def count_by_status(conn, status: str) -> int:
 
 
 def name_entry_shop(conn, entry_id: int, shop: str) -> None:
-    """Set an entry's shop; also name its place if that place has no shop yet."""
+    """Set an entry's shop and teach its place: the place takes the new name if it had
+    none or had the entry's old shop name (a correction). Other place names are kept."""
+    r = conn.execute("SELECT shop, place_id FROM entries WHERE id = ?", (entry_id,)).fetchone()
+    if r is None:
+        return
     conn.execute("UPDATE entries SET shop = ? WHERE id = ?", (shop, entry_id))
-    conn.execute("UPDATE places SET shop = ? WHERE shop IS NULL AND id = "
-                 "(SELECT place_id FROM entries WHERE id = ?)", (shop, entry_id))
+    if r["place_id"] is not None:
+        conn.execute("UPDATE places SET shop = ? WHERE id = ? AND (shop IS NULL OR shop = ?)",
+                     (shop, r["place_id"], r["shop"]))
     conn.commit()
