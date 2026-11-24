@@ -46,8 +46,25 @@ def test_bad_date_and_category_fall_back(conn):
                                    category="bogus")])
     [r] = handle_voice_batch(conn, llm, [item("S 3")], "en")
     e = by_client_id(conn, r.id)
-    assert e.date == date(2026, 11, 24) and e.category == "other" and e.status == "ok"
-    assert r.say == "Recorded: S $3.00, Other"
+    assert e.date == date(2026, 11, 24) and e.category == "other"
+    assert (e.status, e.reason, r.status) == ("needs_review", "bad_date", "review")
+    assert r.say == "Recorded: S $3.00, Other — please check"
+
+
+def test_unspoken_date_is_not_bad_date(conn):
+    llm = FakeLLM([UtteranceFields(shop="S", amount=Decimal("3"), date=None, category=None)])
+    [r] = handle_voice_batch(conn, llm, [item("S 3")], "en")
+    e = by_client_id(conn, r.id)
+    assert (e.date, e.status, e.reason) == (date(2026, 11, 24), "ok", None)
+
+
+@pytest.mark.parametrize("text,status,reason", [("500", "ok", None), ("500.01", "needs_review",
+                                                 "large_amount")])
+def test_large_amount_flagged(conn, text, status, reason):
+    add_place(conn, "Shop", 3.0, 3.0)
+    [r] = handle_voice_batch(conn, NoLLM(), [item(text, lat=3.0, lon=3.0)], "en")
+    e = by_client_id(conn, r.id)
+    assert (e.shop, e.status, e.reason) == ("Shop", status, reason)
 
 
 def test_retry_is_duplicate(conn):

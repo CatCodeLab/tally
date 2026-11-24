@@ -248,7 +248,7 @@ def test_template_keys_exist():
     used |= {f"status_{s}" for s in ("ok", "needs_review", "suspected_duplicate", "card_skipped")}
     used |= {f"reason_{r}" for r in ("no_total", "amount_mismatch", "no_shop", "low_confidence",
                                       "bad_date", "extraction_failed", "no_amount",
-                                      "unknown_place", "ambiguous_place")}
+                                      "unknown_place", "ambiguous_place", "large_amount")}
     assert used <= set(STRINGS["en"]), used - set(STRINGS["en"])
     assert t("withdrawn", "zh") != t("withdrawn", "en")
 
@@ -357,3 +357,10 @@ def test_no_inline_styles_in_templates():
     # CSP has no 'unsafe-inline' for styles, so style= attributes would be ignored.
     for p in (WEB / "templates").glob("*.html"):
         assert not re.search(r"\sstyle\s*=", p.read_text()), p
+
+
+def test_large_amount_reason_label(dash, conn):
+    add_entry(conn, mk(date=TODAY, status="needs_review", reason="large_amount"))
+    assert "Unusually large amount" in dash.get("/entries?status=review").text
+    dash.post("/lang", data={"lang": "zh", "csrf": csrf(dash)})
+    assert "金额异常大" in dash.get("/entries?status=review").text

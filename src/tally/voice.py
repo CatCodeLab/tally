@@ -13,6 +13,7 @@ from tally.places import resolve_place
 from tally.verify import sane_date
 
 _AMOUNT_ONLY = re.compile(r"^\$?\d+(\.\d{1,2})?$")
+LARGE_CENTS = 50000  # over $500.00 in one cash purchase: ask the user to check
 
 
 class VoiceItem(BaseModel):
@@ -73,14 +74,20 @@ def _handle_one(conn, llm: LLMClient, it: VoiceItem, lang: str) -> VoiceResult:
         shop = place.shop
         category = ((repo.confirmed_category(conn, shop) if shop else None)
                     or cats.normalize(f.category if f else None, conn))
+        sane = sane_date(f.date, captured) if f else None
+        bad_date = f is not None and f.date is not None and sane is None
         reason = None
         if cents is None:
             reason = failure or "no_amount"
+        elif cents > LARGE_CENTS:
+            reason = "large_amount"
         elif shop is None:
             reason = "unknown_place"
         elif place.ambiguous:
             reason = "ambiguous_place"
-        d = (sane_date(f.date, captured) if f else None) or captured
+        elif bad_date:
+            reason = "bad_date"
+        d = sane or captured
         entry = repo.Entry(id=None, source="voice", shop=shop, date=d,
                            amount_cents=cents or 0, category=category,
                            status="needs_review" if reason else "ok", reason=reason,
