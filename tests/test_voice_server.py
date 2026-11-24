@@ -90,19 +90,48 @@ def test_token_stable(conn):
 
 
 @pytest.mark.parametrize("body", [
-    {"items": []}, {"items": [ITEM] * 201}, {}, {"items": [{"id": "x"}]},
-    {"items": [it("g", lat=91, lon=0)]}, {"items": [it("g", lat=0, lon=181)]},
-    {"items": [it("g", lat=-90.1, lon=0)]},
+    {"items": []}, {"items": [ITEM] * 201}, {}, {"items": "x"}, {"items": {"id": "x"}}, [],
 ])
-def test_bad_body_422(client, token, body):
+def test_bad_envelope_422(client, token, body):
     assert client.post("/api/voice", json=body, headers=auth(token)).status_code == 422
 
 
-def test_nan_inf_422(client, token):
+@pytest.mark.parametrize("bad,rid", [
+    ({"id": "x"}, "x"), (it("g", lat=91, lon=0), "g"), (it("g", lat=0, lon=181), "g"),
+    (it("g", lat=-90.1, lon=0), "g"), (it("g", captured_at="2026-11-24T12:00:00"), "g"),
+    (it("i" * 65), None), (it(7), None), ("not an object", None), ({}, None),
+])
+def test_bad_item_is_invalid_not_stored(client, conn, token, bad, rid):
+    r = client.post("/api/voice", json={"items": [bad]}, headers=auth(token))
+    assert r.status_code == 200
+    assert r.json()["results"] == [{"id": rid, "status": "invalid", "say": ""}]
+    assert conn.execute("SELECT COUNT(*) FROM entries").fetchone()[0] == 0
+
+
+def test_nan_inf_item_invalid(client, token):
     for v in ("NaN", "Infinity"):
         raw = ('{"items":[{"id":"g","text":"1","captured_at":"%s","lat":%s,"lon":0}]}' % (T, v))
         r = client.post("/api/voice", content=raw, headers={**auth(token), "content-type": "application/json"})
-        assert r.status_code == 422
+        assert r.status_code == 200 and r.json()["results"][0]["status"] == "invalid"
+
+
+def test_mixed_batch_keeps_valid_items(client, conn, token):
+    body = {"items": [{}, it("long", "x" * 600), it("ok", "40")]}
+    r = client.post("/api/voice", json=body, headers=auth(token))
+    assert r.status_code == 200
+    res = r.json()["results"]
+    assert [x["status"] for x in res] == ["invalid", "invalid", "review"]
+    assert [x["id"] for x in res] == [None, "long", "ok"]
+    assert "synced" not in r.json()["say"] and r.json()["say"].startswith("Recorded")
+    assert [r[0] for r in conn.execute("SELECT client_id FROM entries")] == ["ok"]
+
+
+def test_all_invalid_batch_say(client, conn, token):
+    r = client.post("/api/voice", json={"items": [{}, {"id": "x"}]}, headers=auth(token))
+    assert r.status_code == 200 and r.json()["say"] == "Some entries could not be read"
+    repo.set_setting(conn, "lang", "zh")
+    r = client.post("/api/voice", json={"items": [{}]}, headers=auth(token))
+    assert r.json()["say"] == "有记录无法识别"
 
 
 def test_boundary_coords_ok(client, token):

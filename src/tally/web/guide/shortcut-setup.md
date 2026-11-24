@@ -55,10 +55,11 @@ Content-Type: application/json
 - `captured_at`: ISO 8601 **with a timezone offset** (`-05:00` or `Z`). A date without an offset is rejected.
 - `lat` / `lon`: optional. lat -90 to 90, lon -180 to 180. Leave the keys out when you have no location. Do not send empty strings.
 - Body limit 256 KB (413 beyond that). A long offline backlog must be sent in chunks (see step 7).
-- Response: JSON `{"results": [{"id", "status", "say"}, ...], "say": "..."}` where `status` is `recorded`, `review` or `duplicate`, and `say` is the sentence to speak.
-- `401` bad or missing token. `422` bad body. Any other path or method returns `404`.
+- Response: JSON `{"results": [{"id", "status", "say"}, ...], "say": "..."}` where `status` is `recorded`, `review`, `duplicate` or `invalid`, and `say` is the sentence to speak.
+- Each item is checked on its own. An item that breaks the rules above (blank, text over 500 characters, missing or bad `captured_at`, out-of-range lat/lon, ...) gets status `invalid` and is **dropped**: the Mac does not store it and it is listed nowhere, not even on the dashboard. The rest of the batch is still recorded and the reply is still `200`, so one bad item never blocks the queue. Keep dictations short. If every item is invalid, `say` is "Some entries could not be read".
+- `401` bad or missing token. `422` bad envelope (no `items` list, or 0 or more than 200 items). Any other path or method returns `404`.
 
-Important: the Shortcuts "Get Contents of URL" action does **not** fail on a 401 or 422; it just hands back the error body. That is why step 8 checks for `say` instead of trusting that "no error means success".
+Important: the Shortcuts "Get Contents of URL" action does **not** fail on a 401 or 422; it just hands back the error body. That is why step 8 checks for `results` instead of trusting that "no error means success".
 
 ## Build the Shortcut
 
@@ -81,7 +82,7 @@ Add four **Text** actions, each followed by **Set Variable**, so they are easy t
 
 The server accepts things like `40`, `$40`, `Costco 40` and free phrases; a bare number becomes an "Unknown shop" entry for you to name on the dashboard.
 
-### 3. Location (optional)
+### 3. Location (needs permission)
 
 1. **Get Current Location**.
 2. **Get Details of Locations**: Get **Latitude**, then **Set Variable** `Lat`. Add another **Get Details of Locations** (input: the location) for **Longitude** and **Set Variable** `Lon`.
@@ -97,7 +98,7 @@ First compute the id and time:
 3. **Current Date**, then **Format Date**: Date Format **ISO 8601**. Set Variable `When`. Run it once with **Show Result**: it must look like `2026-11-24T10:15:30-05:00` (an offset or `Z` at the end). If it has no offset, use Custom format `yyyy-MM-dd'T'HH:mm:ssxxx` instead.
 4. **Combine Text** is not needed: in the Dictionary, the id value is a **Text** field containing the `Stamp` variable, a hyphen, and the `Rand` variable.
 
-Then, to avoid sending empty lat/lon (which would be a 422), use an **If**:
+Then, to avoid sending empty lat/lon (the Mac would reject that item as `invalid` and drop it), use an **If**:
 
 - **If** `Lat` **has any value**:
   - **Dictionary** with keys: `id` (Text: `Stamp-Rand`), `text` (Text: `Spoken`), `captured_at` (Text: `When`), `lat` (**Number**: `Lat`), `lon` (**Number**: `Lon`). **Set Variable** `Entry`.
@@ -132,10 +133,12 @@ After this step the entry is on the phone, so nothing is lost if the next steps 
 
 1. **Get File** `queue.txt` from **On My iPhone > Shortcuts** (same as step 5.2), then **Get Text from Input**.
 2. **Split Text** by **New Lines**. Set Variable `Lines`.
-3. Chunking. The server accepts at most 200 items (and 256 KB) per request; more gets a 422. Normally you have a handful, so you can skip this. To be safe with a big backlog, send at most 200 lines per run: **Get Items from List** on `Lines` with the range **1 to 200** (wording varies by iOS; if you cannot express a range, use the simple rule below). Set that as `Batch` and use `Batch` in the loop below. Also make `Rest` = **Get Items from List** range **201 to the end**, used in step 8. Simple rule if you skip this: if you have more than 200 queued entries, trim `queue.txt` by hand in Files, or run the Shortcut again after each sync once you have added the range steps.
-4. **Repeat with Each** item in `Lines`:
-   - **Get Dictionary from Input** (input: *Repeat Item*).
-   - **Add to Variable** `Items`.
+3. Chunking. The server accepts at most 200 items (and 256 KB) per request; more gets a 422. Normally you have a handful, so you can skip the range steps and just **Set Variable** `Batch` to `Lines`. To be safe with a big backlog, send at most 200 lines per run: **Get Items from List** on `Lines` with the range **1 to 200** (wording varies by iOS; if you cannot express a range, use the simple rule below). Set that as `Batch`. Also make `Rest` = **Get Items from List** range **201 to the end**, used in step 8. Simple rule if you skip this: if you have more than 200 queued entries, trim `queue.txt` by hand in Files, or run the Shortcut again after each sync once you have added the range steps.
+4. **Repeat with Each** item in `Batch`, skipping blank lines (a trailing new line in the file gives an empty last line):
+   - **If** *Repeat Item* **has any value**:
+     - **Get Dictionary from Input** (input: *Repeat Item*).
+     - **Add to Variable** `Items`.
+   - **End If**
    - **End Repeat**
 5. **Get Contents of URL**:
    - URL: `http://` `Host` `:` `Port` `/api/voice`
@@ -144,7 +147,7 @@ After this step the entry is on the phone, so nothing is lost if the next steps 
    - Request Body **JSON**: add one field, key `items`, type **Array** (or List), value the `Items` variable.
 6. **Set Variable** `Response`.
 
-If the JSON body editor will not accept a variable as the whole array, use this fallback instead of 4 and the JSON body: **Combine Text** `Lines` with custom separator `,`; **Text** = `{"items":[` + that + `]}`; in Get Contents of URL set Request Body **File** with that text, and add the header `Content-Type: application/json` yourself.
+If the JSON body editor will not accept a variable as the whole array, use this fallback instead of 4 and the JSON body: **Repeat with Each** item in `Batch`: **If** *Repeat Item* **has any value**, **Add to Variable** `Clean`; **End If**; **End Repeat** (this skips blank lines). Then **Combine Text** `Clean` with custom separator `,`; **Text** = `{"items":[` + that + `]}`; in Get Contents of URL set Request Body **File** with that text, and add the header `Content-Type: application/json` yourself.
 
 ### 8. Clear the queue only on success, then speak
 
@@ -152,7 +155,8 @@ Remember: a 401 or 422 does not raise an error, so test the reply instead of ass
 
 1. **Get Dictionary Value**: key `results`, from `Response`. Set Variable `Results`. Also **Get Dictionary Value** key `say` from `Response`, Set Variable `Say`.
 2. **If** `Results` **has any value**:
-   - **Text** (empty; leave the field blank), then **Save File** to **On My iPhone > Shortcuts**, Subpath `queue.txt`, **Overwrite If File Exists** on, Ask Where to Save off. (If you chunked in step 7.3, save `Rest` joined with new lines instead of an empty text.)
+   - Without chunking: **Get File** `queue.txt` from **On My iPhone > Shortcuts** (Error If Not Found off), then **Delete Files** with that file as input, **Confirm Before Deleting** off. Step 5 creates a fresh `queue.txt` next time. (Do not save an empty text instead: that leaves a blank line that later runs would have to skip.)
+   - If you chunked in step 7.3: **If** `Rest` **has any value**: **Combine Text** `Rest` with **New Lines**, then **Save File** to **On My iPhone > Shortcuts**, Subpath `queue.txt`, **Overwrite If File Exists** on, Ask Where to Save off. **Otherwise**: delete `queue.txt` as above. **End If**
    - **Speak Text** `Say`.
 3. **Otherwise**:
    - **Speak Text**/**Show Result**: `Sync failed, items kept / 同步失败，已保留`. Do not touch the queue.
@@ -161,6 +165,8 @@ Remember: a 401 or 422 does not raise an error, so test the reply instead of ass
 If the phone cannot reach the Mac at all (Mac asleep, wrong host, Local Network blocked), **Get Contents of URL** raises an error and the Shortcut stops before this step, so the queue is also kept. Ids make re-sending safe: a retry after a half-finished sync returns `duplicate` for items the Mac already has and never double-counts.
 
 Edge case: if the Mac recorded your items but the phone lost the response (Wi-Fi dropped), the queue stays. The next sync reports them all as `duplicate`, the reply still has `results` (and says "Already synced"), so the queue clears. That is expected.
+
+Invalid items also count as success here: the reply has `results`, so the queue is cleared and those items are gone for good (the Mac drops them and lists them nowhere). That is what keeps one broken line from blocking every later sync. Keep each dictation short (500 characters at most).
 
 ### 9. Home Screen and Siri
 
@@ -181,7 +187,7 @@ Edge case: if the Mac recorded your items but the phone lost the response (Wi-Fi
 
 1. On home Wi-Fi, run the Shortcut and say "40". You should hear "Recorded: Unknown shop $40.00, ... please check", and an "Unknown shop" entry appears under Review on the dashboard.
 2. Name the shop on the dashboard, then say "12" again at the same place; the shop is filled in automatically.
-3. Turn Wi-Fi off. Run it: it says "Saved, will sync at home". Come home, run it again: both items sync and `queue.txt` is empty afterward (open it in Files to check).
+3. Turn Wi-Fi off. Run it: it says "Saved, will sync at home". Come home, run it again: both items sync and `queue.txt` is gone afterward (check in Files).
 4. Run it again right away: no duplicates appear.
 
 ## Troubleshooting
@@ -190,5 +196,5 @@ Edge case: if the Mac recorded your items but the phone lost the response (Wi-Fi
 
 - Nothing arrives: open `http://<name>.local:8766/api/voice` in Safari; a `404` page means the server is reachable (GET is deliberately not allowed). A timeout means the Mac is asleep, `tally serve` is not running, or Local Network access is off.
 - `.local` does not resolve: use the Mac's IP address in `Host` instead (set a DHCP reservation so it does not change).
-- Always says "Sync failed": token mismatch (401) or a bad field (422). Show the `Response` with **Show Result**.
+- Always says "Sync failed": token mismatch (401) or a malformed request (422, e.g. more than 200 items). Show the `Response` with **Show Result**.
 - `tally doctor` checks the Mac side.

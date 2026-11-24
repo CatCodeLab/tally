@@ -3,6 +3,7 @@
 Request bodies are capped at 256 KB (413 beyond that); clients should split large batches.
 """
 import secrets
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
@@ -13,13 +14,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from tally import db, repo
 from tally.config import Config
 from tally.llm import LLMClient
-from tally.voice import VoiceItem, VoiceResult, handle_voice_batch
+from tally.voice import VoiceResult, handle_voice_batch, validate_item
 
 MAX_BODY = 256 * 1024
 
 
 class VoiceBatch(BaseModel):
-    items: list[VoiceItem] = Field(min_length=1, max_length=200)
+    # Items are checked one by one (voice.validate_item) so one bad item can't block the rest.
+    items: list[Any] = Field(min_length=1, max_length=200)
 
 
 def _bearer(header: str | None) -> str | None:
@@ -49,7 +51,7 @@ def _process(cfg: Config, llm: LLMClient, token: str | None, batch: VoiceBatch |
         if batch is None:
             return []
         lang = repo.get_setting(conn, "lang", "en") or "en"
-        results = handle_voice_batch(conn, llm, batch.items, lang)
+        results = handle_voice_batch(conn, llm, [validate_item(i) for i in batch.items], lang)
         return results, lang
     finally:
         conn.close()
@@ -89,7 +91,9 @@ def create_voice_app(cfg: Config, llm: LLMClient) -> FastAPI:
             return unauthorized()
         results, lang = out
         say = results[-1].say + _suffix(results, lang)
-        if not say:  # all-duplicate batch: give the phone something to speak
+        if not say and all(r.status == "invalid" for r in results):
+            say = "有记录无法识别" if lang == "zh" else "Some entries could not be read"
+        elif not say:  # all-duplicate batch: give the phone something to speak
             say = "已同步" if lang == "zh" else "Already synced"
         return {"results": [r.model_dump() for r in results], "say": say}
 

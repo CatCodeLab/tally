@@ -1,9 +1,9 @@
 """Voice entries: dictated utterance (+ optional GPS) -> verified entry."""
 import re
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import AwareDatetime, BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field, ValidationError
 
 from tally import categories as cats
 from tally import repo
@@ -24,9 +24,19 @@ class VoiceItem(BaseModel):
 
 
 class VoiceResult(BaseModel):
-    id: str
-    status: Literal["recorded", "duplicate", "review"]
+    id: str | None  # None only for an invalid item without a usable id
+    status: Literal["recorded", "duplicate", "review", "invalid"]
     say: str
+
+
+def validate_item(raw: Any) -> VoiceItem | VoiceResult:
+    """A valid VoiceItem, or an 'invalid' result (the item is dropped, never stored)."""
+    try:
+        return VoiceItem.model_validate(raw)
+    except ValidationError:
+        rid = raw.get("id") if isinstance(raw, dict) else None
+        ok = isinstance(rid, str) and 1 <= len(rid) <= 64
+        return VoiceResult(id=rid if ok else None, status="invalid", say="")
 
 
 def _say(shop: str | None, cents: int, category: str, review: bool, lang: str, conn) -> str:
@@ -87,6 +97,8 @@ def _handle_one(conn, llm: LLMClient, it: VoiceItem, lang: str) -> VoiceResult:
                        say=_say(shop, cents or 0, category, bool(reason), lang, conn))
 
 
-def handle_voice_batch(conn, llm: LLMClient, items: list[VoiceItem],
+def handle_voice_batch(conn, llm: LLMClient, items: list[VoiceItem | VoiceResult],
                        lang: str) -> list[VoiceResult]:
-    return [_handle_one(conn, llm, it, lang) for it in items]
+    """Items already rejected by validate_item pass through as their invalid result."""
+    return [it if isinstance(it, VoiceResult) else _handle_one(conn, llm, it, lang)
+            for it in items]
