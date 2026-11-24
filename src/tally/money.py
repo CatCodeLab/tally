@@ -1,5 +1,5 @@
 import re
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 _AMOUNT = re.compile(r"^\$?\d{1,3}(,\d{3})+(\.\d+)?$|^\$?\d+(\.\d+)?$")
 
@@ -19,3 +19,10 @@ def parse_amount(s: str) -> int:
 def format_cents(c: int) -> str:
     sign = "−" if c < 0 else ""
     return f"{sign}${abs(c) / 100:,.2f}"
+
+
+def to_cents(amount: Decimal | None) -> int | None:
+    """Dollars to cents (ROUND_HALF_UP); None for missing, non-finite or non-positive."""
+    if amount is None or not amount.is_finite() or amount <= 0:
+        return None
+    return int((amount * 100).to_integral_value(rounding=ROUND_HALF_UP))

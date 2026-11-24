@@ -169,3 +169,11 @@ def mark_processed(conn, h: str, name: str, commit: bool = True) -> None:
 
 def count_by_status(conn, status: str) -> int:
     return conn.execute("SELECT COUNT(*) FROM entries WHERE status = ?", (status,)).fetchone()[0]
+
+
+def name_entry_shop(conn, entry_id: int, shop: str) -> None:
+    """Set an entry's shop; also name its place if that place has no shop yet."""
+    conn.execute("UPDATE entries SET shop = ? WHERE id = ?", (shop, entry_id))
+    conn.execute("UPDATE places SET shop = ? WHERE shop IS NULL AND id = "
+                 "(SELECT place_id FROM entries WHERE id = ?)", (shop, entry_id))
+    conn.commit()

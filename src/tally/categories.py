@@ -34,6 +34,12 @@ def is_valid(slug: str, conn: sqlite3.Connection | None = None) -> bool:
     return slug in all_slugs(conn)
 
 
+def normalize(raw: str | None, conn: sqlite3.Connection | None = None) -> str:
+    """Valid slug for a model-supplied category, else 'other'."""
+    s = (raw or "").strip().lower()
+    return s if is_valid(s, conn) else "other"
+
+
 def label(slug: str, lang: str, conn: sqlite3.Connection | None = None) -> str:
     idx = 1 if lang == "zh" else 0
     if slug in _LABELS:

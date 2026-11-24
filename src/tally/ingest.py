@@ -4,7 +4,6 @@ import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 from PIL import Image
@@ -13,6 +12,7 @@ from tally import categories as cats
 from tally import repo
 from tally.config import Config
 from tally.llm import ExtractionError, LLMClient
+from tally.money import to_cents
 from tally.ocr import SUPPORTED, load_pages, ocr_image
 from tally.verify import amount_in_text, sane_date
 
@@ -26,18 +26,6 @@ class ScanResult:
     skipped_files: int = 0
     card: int = 0
     errors: list[str] = field(default_factory=list)
-
-
-def _cents(total: Decimal | None) -> int | None:
-    """Dollars to cents (ROUND_HALF_UP); None for missing, non-finite or non-positive."""
-    if total is None or not total.is_finite() or total <= 0:
-        return None
-    return int((total * 100).to_integral_value(rounding=ROUND_HALF_UP))
-
-
-def _slug(raw: str | None, conn) -> str:
-    s = (raw or "").strip().lower()
-    return s if cats.is_valid(s, conn) else "other"
 
 
 def _unique_dest(dir_: Path, name: str) -> Path:
@@ -63,12 +51,12 @@ def _build_entry(conn, llm: LLMClient, text: str, image_path: str, today: date) 
     except ExtractionError:
         return _failed_entry("extraction_failed", today, image_path, text)
 
-    cents = _cents(f.total)
+    cents = to_cents(f.total)
     d = sane_date(f.date, today)
     shop = (f.shop or "").strip() or None
     category = (repo.confirmed_category(conn, shop) if shop else None) or f.category
     e = repo.Entry(id=None, source="receipt", shop=shop, date=d or today,
-                   amount_cents=cents or 0, category=_slug(category, conn),
+                   amount_cents=cents or 0, category=cats.normalize(category, conn),
                    payment_method=f.payment_method, image_path=image_path, ocr_text=text)
 
     if f.payment_method == "card":
