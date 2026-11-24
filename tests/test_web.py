@@ -306,5 +306,5 @@ def test_pairing_guide_escaped_and_host_checked(dash):
 
 def test_packaged_guide_matches_docs():
     root = Path(__file__).resolve().parents[1]
-    assert (root / "docs/shortcut-setup.md").read_text() == \
-        (root / "src/tally/web/guide/shortcut-setup.md").read_text()
+    assert (root / "docs/shortcut-setup.md").read_text(encoding="utf-8") == \
+        (root / "src/tally/web/guide/shortcut-setup.md").read_text(encoding="utf-8")

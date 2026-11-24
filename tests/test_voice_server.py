@@ -123,3 +123,10 @@ def test_streamed_body_cap_without_content_length(client, token):
             yield b"x" * 10240
     r = client.post("/api/voice", content=gen(), headers=auth(token))
     assert r.status_code == 413
+
+
+def test_all_duplicate_batch_has_nonempty_say(client, token):
+    client.post("/api/voice", json={"items": [ITEM_A]}, headers=auth(token))
+    r = client.post("/api/voice", json={"items": [ITEM_A]}, headers=auth(token))
+    assert r.status_code == 200 and r.json()["say"] == "Already synced"
+    assert r.json()["results"][0]["status"] == "duplicate"

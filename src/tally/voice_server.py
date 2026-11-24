@@ -89,6 +89,8 @@ def create_voice_app(cfg: Config, llm: LLMClient) -> FastAPI:
             return unauthorized()
         results, lang = out
         say = results[-1].say + _suffix(results, lang)
+        if not say:  # all-duplicate batch: give the phone something to speak
+            say = "已同步" if lang == "zh" else "Already synced"
         return {"results": [r.model_dump() for r in results], "say": say}
 
     return app

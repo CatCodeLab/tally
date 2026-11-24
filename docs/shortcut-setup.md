@@ -14,7 +14,7 @@ The rest of this document is in English.
 
 A Shortcut named "Tally" that you trigger by Siri, Home Screen icon or Action Button. It asks for an amount and shop (spoken or typed), stamps it with time and location, saves it to a queue file on the phone, and, only when the phone is on your home Wi-Fi, sends the whole queue to your Mac and clears it.
 
-Nothing leaves your home network. The Mac never needs the internet for this.
+The Mac side never needs the internet. Only typed or dictated text (plus time and optional coordinates) is sent to your Mac, never audio. iOS dictation itself may be processed by Apple depending on your device and language settings; type instead if that matters to you.
 
 ## Prerequisites
 
@@ -86,7 +86,7 @@ The server accepts things like `40`, `$40`, `Costco 40` and free phrases; a bare
 1. **Get Current Location**.
 2. **Get Details of Locations**: Get **Latitude**, then **Set Variable** `Lat`. Add another **Get Details of Locations** (input: the location) for **Longitude** and **Set Variable** `Lon`.
 
-Honest limit: Shortcuts has no try/catch. If Location Services is off for Shortcuts, or no fix is available, **Get Current Location** can abort the whole run. Set the Shortcuts location permission to "While Using" or "Always" and "Precise" on. If you would rather never risk it, delete step 3 and use the no-coordinates branch in step 4 only.
+Honest limit: Shortcuts has no try/catch, so there is **no automatic fallback** if location fails. If Shortcuts does not have location permission (or Location Services is off, or no fix is available), **Get Current Location** stops the whole run before anything is saved, and that capture is lost. Prevent this by granting Shortcuts location access ("While Using the App" or "Always", with Precise Location on) in Settings > Privacy & Security > Location Services > Shortcuts, and run the Shortcut once to accept the prompt. If you cannot or do not want location, use the "Tally (no location)" variant described under Troubleshooting.
 
 ### 4. Build the entry (Dictionary)
 
@@ -132,7 +132,7 @@ After this step the entry is on the phone, so nothing is lost if the next steps 
 
 1. **Get File** `queue.txt` from **On My iPhone > Shortcuts** (same as step 5.2), then **Get Text from Input**.
 2. **Split Text** by **New Lines**. Set Variable `Lines`.
-3. Chunking. The server accepts 200 items and 256 KB per request. Normally you have a handful, so ignore this. After a long time away from home: **Get Item from List**/**Get Items from List** set to the first 200 items of `Lines` (Items in Range 1 to 200; the exact wording varies by iOS). Use that as `Lines`, and in step 8 keep the rest instead of clearing everything. If you do not do this and the backlog exceeds 200, the server answers 422 and nothing syncs until you trim the file by hand.
+3. Chunking. The server accepts at most 200 items (and 256 KB) per request; more gets a 422. Normally you have a handful, so you can skip this. To be safe with a big backlog, send at most 200 lines per run: **Get Items from List** on `Lines` with the range **1 to 200** (wording varies by iOS; if you cannot express a range, use the simple rule below). Set that as `Batch` and use `Batch` in the loop below. Also make `Rest` = **Get Items from List** range **201 to the end**, used in step 8. Simple rule if you skip this: if you have more than 200 queued entries, trim `queue.txt` by hand in Files, or run the Shortcut again after each sync once you have added the range steps.
 4. **Repeat with Each** item in `Lines`:
    - **Get Dictionary from Input** (input: *Repeat Item*).
    - **Add to Variable** `Items`.
@@ -148,11 +148,11 @@ If the JSON body editor will not accept a variable as the whole array, use this 
 
 ### 8. Clear the queue only on success, then speak
 
-Remember: a 401 or 422 does not raise an error, so test for a `say` in the reply rather than assuming.
+Remember: a 401 or 422 does not raise an error, so test the reply instead of assuming. A successful reply always has a `results` list; error replies only have `detail`. (`say` can be an all-duplicate "Already synced", but success is judged by `results`, not by `say`.)
 
-1. **Get Dictionary Value**: key `say`, from `Response`. Set Variable `Say`.
-2. **If** `Say` **has any value**:
-   - **Text** (empty; leave the field blank), then **Save File** to **On My iPhone > Shortcuts**, Subpath `queue.txt`, **Overwrite If File Exists** on, Ask Where to Save off. (If you chunked in step 7.3, save the remaining lines instead of an empty text.)
+1. **Get Dictionary Value**: key `results`, from `Response`. Set Variable `Results`. Also **Get Dictionary Value** key `say` from `Response`, Set Variable `Say`.
+2. **If** `Results` **has any value**:
+   - **Text** (empty; leave the field blank), then **Save File** to **On My iPhone > Shortcuts**, Subpath `queue.txt`, **Overwrite If File Exists** on, Ask Where to Save off. (If you chunked in step 7.3, save `Rest` joined with new lines instead of an empty text.)
    - **Speak Text** `Say`.
 3. **Otherwise**:
    - **Speak Text**/**Show Result**: `Sync failed, items kept / 同步失败，已保留`. Do not touch the queue.
@@ -160,7 +160,7 @@ Remember: a 401 or 422 does not raise an error, so test for a `say` in the reply
 
 If the phone cannot reach the Mac at all (Mac asleep, wrong host, Local Network blocked), **Get Contents of URL** raises an error and the Shortcut stops before this step, so the queue is also kept. Ids make re-sending safe: a retry after a half-finished sync returns `duplicate` for items the Mac already has and never double-counts.
 
-Edge case: if the Mac recorded your items but the phone lost the response (Wi-Fi dropped), the queue stays and the next sync reports them as duplicates, then clears. That is expected.
+Edge case: if the Mac recorded your items but the phone lost the response (Wi-Fi dropped), the queue stays. The next sync reports them all as `duplicate`, the reply still has `results` (and says "Already synced"), so the queue clears. That is expected.
 
 ### 9. Home Screen and Siri
 
@@ -185,6 +185,8 @@ Edge case: if the Mac recorded your items but the phone lost the response (Wi-Fi
 4. Run it again right away: no duplicates appear.
 
 ## Troubleshooting
+
+- Location problems or you want a text-only entry: Shortcuts cannot recover from a location failure mid-run. Make a second Shortcut: duplicate "Tally", rename it "Tally (no location)", delete step 3, and in step 4 keep only the Otherwise branch (the dictionary without `lat` / `lon`). Add it to the Home Screen next to the main one and use it when location is unavailable.
 
 - Nothing arrives: open `http://<name>.local:8766/api/voice` in Safari; a `404` page means the server is reachable (GET is deliberately not allowed). A timeout means the Mac is asleep, `tally serve` is not running, or Local Network access is off.
 - `.local` does not resolve: use the Mac's IP address in `Host` instead (set a DHCP reservation so it does not change).
