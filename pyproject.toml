@@ -1,10 +1,10 @@
 [project]
 name = "tally"
 version = "0.1.0"
-description = "Add your description here"
+description = "Local cash spending tracker for macOS: receipts, voice notes and a private dashboard."
 readme = "README.md"
 authors = [
-    { name = "Jess Tao", email = "jesstao-code@outlook.com" }
+    { name = "Jess Tao" }
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.scripts]
-tally = "tally:main"
+tally = "tally.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.9.10,<0.10.0"]
@@ -31,4 +31,9 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
 ]
