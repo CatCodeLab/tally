@@ -308,3 +308,15 @@ def test_packaged_guide_matches_docs():
     root = Path(__file__).resolve().parents[1]
     assert (root / "docs/shortcut-setup.md").read_text(encoding="utf-8") == \
         (root / "src/tally/web/guide/shortcut-setup.md").read_text(encoding="utf-8")
+
+
+def test_filtered_overview_notes_unfiltered_cash_figures(dash, conn):
+    repo.add_withdrawal(conn, TODAY, 10000)
+    add_entry(conn, mk(amount_cents=3000, date=TODAY, category="food", shop="A"))
+    add_entry(conn, mk(amount_cents=1000, date=TODAY, category="groceries", shop="B"))
+    assert "All categories and shops" not in dash.get("/").text
+    html = dash.get("/?category=food").text
+    assert "$60.00" in html and "All categories and shops" in html
+    assert "All categories and shops" in dash.get("/?shop=B").text
+    dash.post("/lang", data={"lang": "zh", "csrf": csrf(dash)})
+    assert "全部类别和商家" in dash.get("/?category=food").text

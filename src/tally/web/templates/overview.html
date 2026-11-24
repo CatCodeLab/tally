@@ -46,11 +46,13 @@
 </details>
 
 <div class="kpis">
-  <div class="kpi"><div class="t">{{ t('withdrawn') }}</div><div class="n">{{ money(s.withdrawn_cents) }}</div></div>
+  <div class="kpi"><div class="t">{{ t('withdrawn') }}</div><div class="n">{{ money(s.withdrawn_cents) }}</div>
+    {% if s.filtered %}<div class="sub">{{ t('unfiltered_note') }}</div>{% endif %}</div>
   <div class="kpi"><div class="t">{{ t('recorded') }}</div><div class="n">{{ money(s.recorded_cents) }}</div>
     {% if s.unconfirmed_cents %}<div class="sub">{{ t('incl_unconfirmed').format(amount=money(s.unconfirmed_cents)) }}</div>{% endif %}</div>
   <div class="kpi warn"><div class="t">{{ t('unaccounted') }}</div><div class="n">{{ money(s.unaccounted_cents) }}</div>
-    {% if s.unaccounted_cents < 0 %}<div class="sub">{{ t('spent_from_earlier') }}</div>{% endif %}</div>
+    {% if s.unaccounted_cents < 0 %}<div class="sub">{{ t('spent_from_earlier') }}</div>{% endif %}
+    {% if s.filtered %}<div class="sub">{{ t('unfiltered_note') }}</div>{% endif %}</div>
 </div>
 
 <div class="row">

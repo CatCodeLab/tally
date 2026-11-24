@@ -18,6 +18,7 @@ class Summary:
     buckets: list[tuple[str, int]]
     top_shops: list[tuple[str, int, int]]
     review_count: int
+    filtered: bool = False  # category/shop filter applied (withdrawn/unaccounted ignore it)
 
 
 def _monday(d: date) -> date:
@@ -47,6 +48,10 @@ def summary(conn, f: Filters) -> Summary:
     entries = repo.list_entries(conn, f)
     withdrawn = repo.sum_withdrawals(conn, f.start, f.end)
     recorded = sum(e.amount_cents for e in entries)
+    filtered = f.category is not None or f.shop is not None
+    # Cash withdrawn has no category or shop, so the gap is always over everything in range.
+    recorded_all = (sum(e.amount_cents for e in repo.list_entries(
+        conn, Filters(f.start, f.end, statuses=f.statuses))) if filtered else recorded)
     unconfirmed = sum(e.amount_cents for e in entries if e.status == "needs_review")
 
     cats: dict[str, int] = defaultdict(int)
@@ -65,5 +70,5 @@ def summary(conn, f: Filters) -> Summary:
     top_shops = sorted(((s, v[0], v[1]) for s, v in shops.items()), key=lambda x: -x[1])[:10]
     review_count = (repo.count_by_status(conn, "needs_review")
                     + repo.count_by_status(conn, "suspected_duplicate"))
-    return Summary(withdrawn, recorded, withdrawn - recorded, unconfirmed,
-                   by_category, list(buckets.items()), top_shops, review_count)
+    return Summary(withdrawn, recorded, withdrawn - recorded_all, unconfirmed,
+                   by_category, list(buckets.items()), top_shops, review_count, filtered)

@@ -69,3 +69,18 @@ def test_no_shop_excluded_from_top_shops(conn):
     s = summary(conn, Filters(date(2026,11,1), date(2026,11,30)))
     assert s.top_shops == [("A", 100, 1)]
     assert s.recorded_cents == 1000
+
+
+def test_unaccounted_ignores_category_shop_filters(conn):
+    add_withdrawal(conn, date(2026,11,2), 10000)
+    add_entry(conn, mk(date=date(2026,11,3), amount_cents=300, category="food", shop="A"))
+    add_entry(conn, mk(date=date(2026,11,4), amount_cents=700, category="groceries", shop="B",
+                       status="needs_review"))
+    rng = (date(2026,11,1), date(2026,11,30))
+    s = summary(conn, Filters(*rng, category="food"))
+    assert s.filtered is True
+    assert (s.withdrawn_cents, s.recorded_cents, s.unconfirmed_cents) == (10000, 300, 0)
+    assert s.unaccounted_cents == 10000 - 1000
+    s = summary(conn, Filters(*rng, shop="B"))
+    assert (s.recorded_cents, s.unconfirmed_cents, s.unaccounted_cents) == (700, 700, 9000)
+    assert summary(conn, Filters(*rng)).filtered is False
