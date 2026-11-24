@@ -260,3 +260,36 @@ def test_no_external_urls():
     chart = WEB / "static" / "chart.umd.min.js"
     assert chart.exists()
     assert not re.search(r"""(src|href)\s*=\s*["']https?://""", chart.read_text())
+
+
+def test_security_headers_present(dash):
+    h = dash.get("/").headers
+    assert h["referrer-policy"] != "no-referrer"  # no-referrer makes Chrome send Origin: null
+    assert h["referrer-policy"] == "same-origin"
+    assert h["cross-origin-resource-policy"] == "same-origin"
+    assert "default-src 'self'" in h["content-security-policy"]
+    assert h["x-frame-options"] == "DENY" and h["x-content-type-options"] == "nosniff"
+
+
+def test_null_origin_rejected(dash):
+    r = dash.post("/lang", data={"lang": "zh", "csrf": csrf(dash)}, headers={"Origin": "null"})
+    assert r.status_code == 403
+
+
+def test_uncategorised_entry_preselects_other(dash, conn):
+    eid = add_entry(conn, mk(category=None, shop="Kiosk", status="needs_review", date=TODAY))
+    html = dash.get(f"/entries/{eid}").text
+    assert '<option value="other" selected>' in html
+    post(dash, f"/entries/{eid}", shop="Kiosk", date=TODAY.isoformat(), amount="1",
+         category="other")
+    assert repo.confirmed_category(conn, "Kiosk") is None
+
+
+def test_concurrent_scan_refused(dash):
+    from tally.web import actions
+    assert actions._scan_lock.acquire(blocking=False)
+    try:
+        assert post(dash, "/scan", next="/").status_code == 303
+    finally:
+        actions._scan_lock.release()
+    assert "already running" in dash.get("/").text

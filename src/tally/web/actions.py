@@ -1,8 +1,8 @@
 """State-changing dashboard routes (POST). All are CSRF-guarded."""
+import threading
 from datetime import date
 
 from fastapi import Depends, FastAPI, Form, HTTPException
-from fastapi.concurrency import run_in_threadpool
 
 from tally import categories, ingest, repo
 from tally.config import Config
@@ -13,6 +13,7 @@ from tally.web.common import get_lang, safe_next, see_other, session, set_flash
 from tally.web.security import make_csrf_guard
 
 SSID_MAX = 64
+_scan_lock = threading.Lock()
 
 
 def _amount(s: str) -> int | None:
@@ -65,7 +66,7 @@ def register_actions(app: FastAPI, cfg: Config, llm: LLMClient) -> None:
                     repo.name_entry_shop(conn, entry_id, new_shop)
                 else:
                     repo.update_entry(conn, entry_id, shop=None)
-            if category != e.category and new_shop:
+            if category != (e.category or "other") and new_shop:
                 repo.remember_shop_category(conn, new_shop, category)
             flash(conn, "flash_saved")
             return see_other("/entries?status=review")
@@ -108,6 +109,9 @@ def register_actions(app: FastAPI, cfg: Config, llm: LLMClient) -> None:
     @app.post("/scan", dependencies=guard)
     def scan(next: str = Form("/")):
         with session(cfg) as conn:
+            if not _scan_lock.acquire(blocking=False):
+                flash(conn, "err_scan_busy")
+                return see_other(safe_next(next, "/"))
             try:
                 res = ingest.scan_inbox(conn, cfg, llm)
             except LLMUnavailable as ex:
@@ -119,6 +123,8 @@ def register_actions(app: FastAPI, cfg: Config, llm: LLMClient) -> None:
                     lang = get_lang(conn)
                     extra = i18n.t("flash_scan_errors", lang).format(errors="; ".join(res.errors))
                     set_flash(conn, (repo.get_setting(conn, "flash") or "") + extra)
+            finally:
+                _scan_lock.release()
             return see_other(safe_next(next, "/"))
 
     @app.post("/lang", dependencies=guard)

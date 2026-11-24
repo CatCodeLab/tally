@@ -57,6 +57,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "err_date": "Enter a valid date (YYYY-MM-DD).",
         "err_category": "Unknown category.",
         "err_category_new": "Could not add that category (check the id and labels).",
+        "err_scan_busy": "A scan is already running.",
         "err_llm": "The local model is not available: {msg}",
     },
     "zh": {
@@ -73,7 +74,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "preset_this_month": "本月", "preset_last_month": "上月",
         "preset_last_3_months": "最近 3 个月", "preset_this_year": "今年",
         "custom_range": "自定义范围", "from": "从", "to": "到",
-        "to_review": "⚠ {n} 张待确认", "scan": "扫描新收据",
+        "to_review": "⚠ {n} 条待确认", "scan": "扫描新收据",
         "add_entry": "记一笔花费", "add_withdrawal": "记一笔取现",
         "shop": "商家", "date": "日期", "amount": "金额", "category": "类别",
         "add": "添加", "save": "保存",
@@ -115,6 +116,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "err_date": "请输入有效日期（YYYY-MM-DD）。",
         "err_category": "未知类别。",
         "err_category_new": "无法添加这个类别（请检查标识和名称）。",
+        "err_scan_busy": "已有扫描正在进行。",
         "err_llm": "本地模型不可用：{msg}",
     },
 }

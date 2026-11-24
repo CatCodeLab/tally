@@ -20,7 +20,7 @@
       <label>{{ t('date') }} <input type="date" name="date" value="{{ e.date.isoformat() if e.date }}" required></label>
       <label>{{ t('amount') }} <input name="amount" inputmode="decimal" value="{{ '%.2f' % (e.amount_cents / 100) }}" required></label>
       <label>{{ t('category') }} <select name="category">
-        {% for slug, name in category_options %}<option value="{{ slug }}" {{ 'selected' if slug == e.category }}>{{ name }}</option>{% endfor %}
+        {% for slug, name in category_options %}<option value="{{ slug }}" {{ 'selected' if slug == (e.category or 'other') }}>{{ name }}</option>{% endfor %}
       </select></label>
       {% if e.status == 'card_skipped' %}
         <button class="primary">{{ t('not_card') }}</button>
