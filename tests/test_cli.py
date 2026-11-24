@@ -108,3 +108,36 @@ def test_serve_exits_when_a_server_fails(tmp_config):
             asyncio.run(asyncio.wait_for(_serve(build_servers(cfg, NoLLM(), voice=False), None), 10))
     finally:
         blocker.close()
+
+
+def test_cli_rejects_zero_amounts(runner, conn_after):
+    r = runner.invoke(app, ["add", "0", "X"])
+    assert r.exit_code != 0 and "greater than zero" in r.output
+    assert runner.invoke(app, ["withdraw", "0.00"]).exit_code != 0
+    c = conn_after()
+    assert c.execute("SELECT COUNT(*) FROM entries").fetchone()[0] == 0
+    assert c.execute("SELECT COUNT(*) FROM withdrawals").fetchone()[0] == 0
+
+
+def test_cli_scan_exits_1_on_file_errors(runner, monkeypatch):
+    from tally import cli
+    from tally.ingest import ScanResult
+    monkeypatch.setattr(cli.ingest, "scan_inbox",
+                        lambda conn, cfg, llm: ScanResult(added=1, errors=["r.pdf: boom"]))
+    r = runner.invoke(app, ["scan"])
+    assert r.exit_code == 1 and "Added 1" in r.output and "Error: r.pdf: boom" in r.output
+    monkeypatch.setattr(cli.ingest, "scan_inbox", lambda conn, cfg, llm: ScanResult(added=1))
+    assert runner.invoke(app, ["scan"]).exit_code == 0
+
+
+def test_cli_serve_prints_voice_endpoint(runner, monkeypatch):
+    from tally import cli
+
+    async def fake_serve(servers, url):
+        pass
+    monkeypatch.setattr(cli, "_serve", fake_serve)
+    monkeypatch.setattr(cli, "bonjour_hostname", lambda: "box.local")
+    r = runner.invoke(app, ["serve", "--no-open"])
+    assert r.exit_code == 0 and "http://box.local:8766/api/voice" in r.output
+    r = runner.invoke(app, ["serve", "--no-open", "--no-voice"])
+    assert r.exit_code == 0 and "api/voice" not in r.output

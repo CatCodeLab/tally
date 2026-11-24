@@ -24,9 +24,12 @@ def _llm(cfg: Config) -> OllamaClient:
 
 def _amount(s: str) -> int:
     try:
-        return parse_amount(s)
+        cents = parse_amount(s)
     except ValueError as e:
         raise typer.BadParameter(str(e)) from None
+    if cents <= 0:
+        raise typer.BadParameter("amount must be greater than zero")
+    return cents
 
 
 def _date(s: str | None) -> date:
@@ -54,6 +57,8 @@ def scan() -> None:
                f"Card skipped {r.card} · Already seen {r.skipped_files}")
     for err in r.errors:
         typer.echo(f"Error: {err}")
+    if r.errors:
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -141,6 +146,8 @@ def serve(no_voice: bool = typer.Option(False, "--no-voice"),
     servers = build_servers(cfg, _llm(cfg), voice=not no_voice)
     url = None if no_open else f"http://127.0.0.1:{cfg.dash_port}/"
     typer.echo(f"Dashboard: http://127.0.0.1:{cfg.dash_port}/")
+    if not no_voice:
+        typer.echo(f"Voice endpoint: http://{bonjour_hostname()}:{cfg.voice_port}/api/voice")
     try:
         asyncio.run(_serve(servers, url))
     except KeyboardInterrupt:
