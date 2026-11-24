@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bar">
+  <div class="range">
+    <b>{{ range_label }}</b>
+    <a class="step" href="{{ prev_url }}" title="{{ t('prev') }}">‹</a>
+    <a class="step" href="{{ next_url }}" title="{{ t('next') }}">›</a>
+  </div>
+  <form method="post" action="/lang" class="lang">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="next" value="{{ here }}">
+    <button name="lang" value="en" class="{{ 'on' if lang == 'en' }}">EN</button>
+    <button name="lang" value="zh" class="{{ 'on' if lang == 'zh' }}">中文</button>
+  </form>
+</div>
+
+<div class="bar">
+  <form method="get" action="/" class="filters">
+    {% if active %}<input type="hidden" name="preset" value="{{ active }}">
+    {% else %}<input type="hidden" name="start" value="{{ start }}"><input type="hidden" name="end" value="{{ end }}">{% endif %}
+    <select name="category" data-autosubmit>
+      <option value="">{{ t('all_categories') }}</option>
+      {% for slug, name in category_options %}<option value="{{ slug }}" {{ 'selected' if slug == category }}>{{ name }}</option>{% endfor %}
+    </select>
+    <select name="shop" data-autosubmit>
+      <option value="">{{ t('all_shops') }}</option>
+      {% for n in shop_names %}<option value="{{ n }}" {{ 'selected' if n == shop }}>{{ n }}</option>{% endfor %}
+    </select>
+    <button>{{ t('apply') }}</button>
+  </form>
+  {% if s.review_count %}<a class="badge" href="/entries?status=review">{{ t('to_review').format(n=s.review_count) }}</a>{% endif %}
+</div>
+
+<details class="rangepanel" {{ 'open' if not active }}>
+  <summary class="chip">📅 {{ start }} → {{ end }} ▾</summary>
+  <div class="chips">
+    {% for p in presets %}<a class="chip {{ 'on' if p == active }}" href="{{ link(preset=p, start=None, end=None) }}">{{ t('preset_' ~ p) }}</a>{% endfor %}
+  </div>
+  <form method="get" action="/" class="custom">
+    {{ t('from') }} <input type="date" name="start" value="{{ start }}" required>
+    {{ t('to') }} <input type="date" name="end" value="{{ end }}" required>
+    {% if category %}<input type="hidden" name="category" value="{{ category }}">{% endif %}
+    {% if shop %}<input type="hidden" name="shop" value="{{ shop }}">{% endif %}
+    <button>{{ t('custom_range') }}</button>
+  </form>
+</details>
+
+<div class="kpis">
+  <div class="kpi"><div class="t">{{ t('withdrawn') }}</div><div class="n">{{ money(s.withdrawn_cents) }}</div></div>
+  <div class="kpi"><div class="t">{{ t('recorded') }}</div><div class="n">{{ money(s.recorded_cents) }}</div>
+    {% if s.unconfirmed_cents %}<div class="sub">{{ t('incl_unconfirmed').format(amount=money(s.unconfirmed_cents)) }}</div>{% endif %}</div>
+  <div class="kpi warn"><div class="t">{{ t('unaccounted') }}</div><div class="n">{{ money(s.unaccounted_cents) }}</div>
+    {% if s.unaccounted_cents < 0 %}<div class="sub">{{ t('spent_from_earlier') }}</div>{% endif %}</div>
+</div>
+
+<div class="row">
+  <div class="box">
+    <h4>{{ t('by_category') }}</h4>
+    {% if cats %}
+    <div class="donut">
+      <div class="cv"><canvas id="cat-chart"></canvas></div>
+      <div class="legend">
+        {% for c in cats %}<a href="{{ c.url }}"><span class="dot" data-color="{{ c.color }}"></span>{{ c.label }} {{ money(c.cents) }}</a>{% endfor %}
+      </div>
+    </div>
+    {% else %}<p class="muted">{{ t('no_data') }}</p>{% endif %}
+  </div>
+  <div class="box">
+    <h4>{{ t('weekly_spending') if gran == 'week' else t('monthly_spending') }}</h4>
+    {% if cats %}<div class="cv bars"><canvas id="bucket-chart"></canvas></div>
+    {% else %}<p class="muted">{{ t('no_data') }}</p>{% endif %}
+  </div>
+</div>
+
+<div class="row">
+  <div class="box">
+    <h4>{{ t('top_shops') }}</h4>
+    <div class="list">
+      {% for name, cents, count, url in top_shops %}<div><a href="{{ url }}">{{ name }}</a> <span>{{ money(cents) }} · {{ count }}×</span></div>
+      {% else %}<p class="muted">{{ t('no_data') }}</p>{% endfor %}
+    </div>
+  </div>
+  <div class="box">
+    <form method="post" action="/scan" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ here }}">
+      <button class="primary">{{ t('scan') }}</button>
+    </form>
+    <h4>{{ t('add_entry') }}</h4>
+    <form method="post" action="/entries" class="grid">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ here }}">
+      <label>{{ t('shop') }} <input name="shop" maxlength="80"></label>
+      <label>{{ t('date') }} <input type="date" name="date" value="{{ today }}" required></label>
+      <label>{{ t('amount') }} <input name="amount" inputmode="decimal" required></label>
+      <label>{{ t('category') }} <select name="category">
+        {% for slug, name in category_options %}<option value="{{ slug }}" {{ 'selected' if slug == 'other' }}>{{ name }}</option>{% endfor %}
+      </select></label>
+      <button>{{ t('add') }}</button>
+    </form>
+    <h4>{{ t('add_withdrawal') }}</h4>
+    <form method="post" action="/withdrawals" class="grid">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ here }}">
+      <label>{{ t('date') }} <input type="date" name="date" value="{{ today }}" required></label>
+      <label>{{ t('amount') }} <input name="amount" inputmode="decimal" required></label>
+      <button>{{ t('add') }}</button>
+    </form>
+    <details>
+      <summary>{{ t('add_category') }}</summary>
+      <form method="post" action="/categories" class="grid">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="next" value="{{ here }}">
+        <label>{{ t('slug') }} <input name="slug" pattern="[a-z][a-z0-9_]{1,20}" required></label>
+        <label>{{ t('label_en') }} <input name="en" maxlength="40" required></label>
+        <label>{{ t('label_zh') }} <input name="zh" maxlength="40"></label>
+        <button>{{ t('add') }}</button>
+      </form>
+    </details>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="application/json" id="chart-data">{{ chart|tojson }}</script>
+<script src="/static/chart.umd.min.js"></script>
+<script src="/static/app.js"></script>
+{% endblock %}
