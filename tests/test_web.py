@@ -335,3 +335,19 @@ def test_withdrawals_tab_lists_and_deletes(dash, conn):
     assert repo.sum_withdrawals(conn, TODAY, TODAY) == 0
     dash.post("/lang", data={"lang": "zh", "csrf": csrf(dash)})
     assert "取现记录" in dash.get("/entries?status=withdrawals").text
+
+
+def test_suspected_duplicate_page_links_match(dash, conn):
+    orig = add_entry(conn, mk(shop="Deli", amount_cents=1250, date=TODAY))
+    dup = add_entry(conn, mk(shop="Deli", amount_cents=1250, date=TODAY,
+                             status="suspected_duplicate"))
+    html = dash.get(f"/entries/{dup}").text
+    assert "Separate purchase — count it" in html and ">Confirm<" not in html
+    assert f'href="/entries/{orig}"' in html
+    assert f'action="/entries/{dup}/delete"' in html
+    assert ">Confirm<" in dash.get(f"/entries/{orig}").text
+    dash.post("/lang", data={"lang": "zh", "csrf": csrf(dash)})
+    assert "不是重复，计入" in dash.get(f"/entries/{dup}").text
+    post(dash, f"/entries/{dup}", shop="Deli", date=TODAY.isoformat(), amount="12.50",
+         category="other")
+    assert get_entry(conn, dup).status == "ok"

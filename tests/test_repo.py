@@ -76,3 +76,9 @@ def test_list_and_delete_withdrawals(conn):
     assert got == [Withdrawal(b, date(2026, 11, 9), 2000), Withdrawal(a, date(2026, 11, 2), 5000)]
     delete_withdrawal(conn, a)
     assert [w.id for w in list_withdrawals(conn, date(2026, 11, 1), date(2026, 11, 30))] == [b]
+
+
+def test_find_duplicate_exclude_id(conn):
+    a = add_entry(conn, mk(shop="D", amount_cents=5))
+    assert find_duplicate(conn, "D", date(2026, 11, 1), 5).id == a
+    assert find_duplicate(conn, "D", date(2026, 11, 1), 5, exclude_id=a) is None

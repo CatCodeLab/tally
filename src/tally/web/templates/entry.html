@@ -3,6 +3,7 @@
 <h2>{{ t('entry_title') }} #{{ e.id }}</h2>
 {% if e.reason %}<p class="badge">{{ t('reason') }}: {{ reason_label(e.reason) }}</p>{% endif %}
 {% if e.status != 'ok' %}<p class="badge">{{ t('status_' ~ e.status) }}</p>{% endif %}
+{% if match %}<p><a href="/entries/{{ match.id }}">{{ t('duplicate_of').format(id=match.id) }}</a></p>{% endif %}
 <div class="detail">
   <div class="media">
     {% if e.image_path %}
@@ -24,6 +25,8 @@
       </select></label>
       {% if e.status == 'card_skipped' %}
         <button class="primary">{{ t('not_card') }}</button>
+      {% elif e.status == 'suspected_duplicate' %}
+        <button class="primary">{{ t('not_duplicate') }}</button>
       {% else %}
         <button class="primary">{{ t('confirm') }}</button>
       {% endif %}

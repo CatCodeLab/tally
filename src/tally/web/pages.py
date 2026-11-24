@@ -146,7 +146,11 @@ def register_pages(app: FastAPI, cfg: Config, templates) -> None:
                 raise HTTPException(404)
             lang = get_lang(conn)
             options = [(c, categories.label(c, lang, conn)) for c in categories.all_slugs(conn)]
-            return render(request, conn, "entry.html", e=e, category_options=options)
+            match = None
+            if e.status == "suspected_duplicate" and e.shop and e.date:
+                match = repo.find_duplicate(conn, e.shop, e.date, e.amount_cents, exclude_id=e.id)
+            return render(request, conn, "entry.html", e=e, category_options=options,
+                          match=match)
 
     @app.get("/images/{entry_id}")
     def image(entry_id: int):

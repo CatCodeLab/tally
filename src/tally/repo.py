@@ -117,11 +117,12 @@ def list_entries(conn, f: Filters) -> list[Entry]:
     return [_row_to_entry(r) for r in conn.execute(sql, args)]
 
 
-def find_duplicate(conn, shop: str, d: date, cents: int) -> Entry | None:
+def find_duplicate(conn, shop: str, d: date, cents: int,
+                   exclude_id: int | None = None) -> Entry | None:
     r = conn.execute(
         "SELECT * FROM entries WHERE shop = ? AND date = ? AND amount_cents = ? "
-        "AND status IN ('ok', 'needs_review') ORDER BY id LIMIT 1",
-        (shop, d.isoformat(), cents)).fetchone()
+        "AND status IN ('ok', 'needs_review') AND id IS NOT ? ORDER BY id LIMIT 1",
+        (shop, d.isoformat(), cents, exclude_id)).fetchone()
     return _row_to_entry(r) if r else None
 
 
