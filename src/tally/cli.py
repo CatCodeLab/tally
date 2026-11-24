@@ -1,5 +1,6 @@
 import asyncio
 import socket
+import subprocess
 import webbrowser
 from datetime import date
 
@@ -104,15 +105,32 @@ def build_servers(cfg: Config, llm, voice: bool = True) -> list[uvicorn.Server]:
 
 
 async def _serve(servers: list[uvicorn.Server], url: str | None) -> None:
+    """Run all servers; if any stops (e.g. port in use), stop the rest and raise."""
     async def open_when_up():
         while not servers[0].started:
             await asyncio.sleep(0.1)
         webbrowser.open(url)
 
-    tasks = [s.serve() for s in servers]
-    if url:
-        tasks.append(open_when_up())
-    await asyncio.gather(*tasks)
+    async def run(server: uvicorn.Server):
+        try:  # uvicorn calls sys.exit on bind failure; keep that out of the event loop
+            await server.serve()
+        except SystemExit:
+            pass
+
+    tasks = [asyncio.ensure_future(run(s)) for s in servers]
+    opener = asyncio.ensure_future(open_when_up()) if url else None
+    try:
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        failed = [s for s in servers if not s.started]
+        for s in servers:
+            s.should_exit = True
+        await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        if opener:
+            opener.cancel()
+    if failed:
+        ports = ", ".join(str(s.config.port) for s in failed)
+        raise RuntimeError(f"could not start server on port {ports} (already in use?)")
 
 
 @app.command()
@@ -127,6 +145,25 @@ def serve(no_voice: bool = typer.Option(False, "--no-voice"),
         asyncio.run(_serve(servers, url))
     except KeyboardInterrupt:
         pass
+    except (RuntimeError, SystemExit) as e:
+        typer.echo(f"Error: {e}")
+        raise typer.Exit(1) from None
+
+
+def normalize_hostname(name: str) -> str:
+    """'Foo', 'Foo.local' or 'Foo.lan' -> 'Foo.local'."""
+    return name.strip().split(".")[0] + ".local"
+
+
+def bonjour_hostname() -> str:
+    try:
+        r = subprocess.run(["scutil", "--get", "LocalHostName"], capture_output=True,
+                           text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            return normalize_hostname(r.stdout)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return normalize_hostname(socket.gethostname())
 
 
 @app.command()
@@ -142,7 +179,7 @@ def pair(regenerate: bool = typer.Option(False, "--regenerate"),
         home_ssid = repo.get_setting(conn, "home_ssid")
     finally:
         conn.close()
-    host = socket.gethostname().split(".")[0] + ".local"
+    host = bonjour_hostname()
     typer.echo(f"Host: {host}")
     typer.echo(f"Port: {cfg.voice_port}")
     typer.echo(f"Token: {token}")

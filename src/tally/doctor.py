@@ -42,11 +42,9 @@ def _run(cmd: list[str]) -> str:
         raise RuntimeError(f"{cmd[0]} not found") from None
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"{cmd[0]} timed out") from None
-    return r.stdout if r.returncode == 0 else _fail(cmd, r)
-
-
-def _fail(cmd, r):
-    raise RuntimeError(f"{cmd[0]} exited {r.returncode}: {(r.stderr or r.stdout).strip()[:100]}")
+    if r.returncode != 0:
+        raise RuntimeError(f"{cmd[0]} exited {r.returncode}: {(r.stderr or r.stdout).strip()[:100]}")
+    return r.stdout
 
 
 def _check_ollama(cfg: Config) -> Check:
@@ -69,7 +67,7 @@ def _check_loopback_only(cfg: Config) -> Check:
         bad = non_loopback_listeners(r.stdout, OLLAMA_PORT)
         if bad:
             return Check(name, False, f"listening on {', '.join(bad)}")
-        return Check(name, True, "only loopback")
+        return Check(name, True, "only loopback" if r.stdout.strip() else "nothing listening")
     except FileNotFoundError:
         return Check(name, False, "lsof not found")
     except Exception as e:

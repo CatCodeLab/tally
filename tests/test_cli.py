@@ -78,3 +78,33 @@ def test_cli_doctor_exit_codes(runner, monkeypatch):
     monkeypatch.setattr(doctor, "run_checks", lambda cfg: [Check("a", False, "bad")])
     r = runner.invoke(app, ["doctor"])
     assert r.exit_code == 1 and "✗ a" in r.output
+
+
+def test_normalize_hostname():
+    from tally.cli import normalize_hostname
+    assert normalize_hostname("Rans-Mac") == "Rans-Mac.local"
+    assert normalize_hostname("Rans-Mac.local") == "Rans-Mac.local"
+    assert normalize_hostname("Rans-Mac.lan\n") == "Rans-Mac.local"
+
+
+def test_bonjour_hostname_fallback(monkeypatch):
+    from tally import cli
+    def boom(*a, **k):
+        raise FileNotFoundError
+    monkeypatch.setattr(cli.subprocess, "run", boom)
+    monkeypatch.setattr(cli.socket, "gethostname", lambda: "box.local")
+    assert cli.bonjour_hostname() == "box.local"
+
+
+def test_serve_exits_when_a_server_fails(tmp_config):
+    import asyncio
+    import socket as sk
+    from tally.cli import _serve
+    blocker = sk.socket(); blocker.bind(("127.0.0.1", 0)); blocker.listen()
+    import dataclasses
+    cfg = dataclasses.replace(tmp_config, dash_port=blocker.getsockname()[1])
+    try:
+        with pytest.raises(RuntimeError, match="already in use"):
+            asyncio.run(asyncio.wait_for(_serve(build_servers(cfg, NoLLM(), voice=False), None), 10))
+    finally:
+        blocker.close()
