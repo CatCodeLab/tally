@@ -1,6 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import Literal
 
 from tally import repo
 from tally.dates import DateRange, granularity
@@ -23,7 +24,7 @@ def _monday(d: date) -> date:
     return d - timedelta(days=d.weekday())
 
 
-def _bucket_keys(r: DateRange, gran: str) -> list[str]:
+def _bucket_keys(r: DateRange, gran: Literal["week", "month"]) -> list[str]:
     keys: list[str] = []
     if gran == "week":
         d = _monday(r.start)
@@ -38,7 +39,7 @@ def _bucket_keys(r: DateRange, gran: str) -> list[str]:
     return keys
 
 
-def _bucket_key(d: date, gran: str) -> str:
+def _bucket_key(d: date, gran: Literal["week", "month"]) -> str:
     return _monday(d).isoformat() if gran == "week" else f"{d.year:04d}-{d.month:02d}"
 
 
@@ -50,10 +51,11 @@ def summary(conn, f: Filters) -> Summary:
 
     cats: dict[str, int] = defaultdict(int)
     shops: dict[str, list[int]] = defaultdict(lambda: [0, 0])
-    gran = granularity(DateRange(f.start, f.end))
-    buckets = dict.fromkeys(_bucket_keys(DateRange(f.start, f.end), gran), 0)
+    rng = DateRange(f.start, f.end)
+    gran = granularity(rng)
+    buckets = dict.fromkeys(_bucket_keys(rng, gran), 0)
     for e in entries:
-        cats[e.category or "uncategorized"] += e.amount_cents
+        cats[e.category or "other"] += e.amount_cents
         if e.shop:
             shops[e.shop][0] += e.amount_cents
             shops[e.shop][1] += 1

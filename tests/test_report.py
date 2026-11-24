@@ -54,3 +54,18 @@ def test_top_shops_limit_and_order(conn):
     assert len(s.top_shops) == 10
     assert s.top_shops[0] == ("s11", 112, 2)
     assert s.top_shops[1] == ("s10", 110, 1)
+
+
+def test_none_category_merges_into_other(conn):
+    add_entry(conn, mk(category=None, amount_cents=300))
+    add_entry(conn, mk(category="other", amount_cents=200))
+    s = summary(conn, Filters(date(2026,11,1), date(2026,11,30)))
+    assert s.by_category == [("other", 500)]
+
+
+def test_no_shop_excluded_from_top_shops(conn):
+    add_entry(conn, mk(shop=None, amount_cents=900))
+    add_entry(conn, mk(shop="A", amount_cents=100))
+    s = summary(conn, Filters(date(2026,11,1), date(2026,11,30)))
+    assert s.top_shops == [("A", 100, 1)]
+    assert s.recorded_cents == 1000
