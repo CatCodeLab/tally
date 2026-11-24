@@ -56,7 +56,7 @@ def _check_category(conn, cat):
         raise ValueError(f"invalid category: {cat!r}")
 
 
-def add_entry(conn, e: Entry) -> int:
+def add_entry(conn, e: Entry, commit: bool = True) -> int:
     _check_category(conn, e.category)
     vals = [_iso(getattr(e, c)) for c in _WRITE_COLS]
     sql = (f"INSERT INTO entries({', '.join(_WRITE_COLS)}) "
@@ -67,7 +67,8 @@ def add_entry(conn, e: Entry) -> int:
         if "client_id" in str(ex):
             raise DuplicateClientId(e.client_id) from ex
         raise
-    conn.commit()
+    if commit:
+        conn.commit()
     return cur.lastrowid
 
 
@@ -159,10 +160,11 @@ def is_processed(conn, h: str) -> bool:
     return conn.execute("SELECT 1 FROM processed_files WHERE hash = ?", (h,)).fetchone() is not None
 
 
-def mark_processed(conn, h: str, name: str) -> None:
+def mark_processed(conn, h: str, name: str, commit: bool = True) -> None:
     conn.execute("INSERT OR IGNORE INTO processed_files(hash, original_name) VALUES (?, ?)",
                  (h, name))
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def count_by_status(conn, status: str) -> int:
