@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pillow_heif
 import pypdfium2
-from PIL import Image
+from PIL import Image, ImageOps
 
 pillow_heif.register_heif_opener()
 
@@ -24,8 +24,8 @@ def load_pages(path: Path) -> list[Image.Image]:
         finally:
             pdf.close()
     with Image.open(path) as img:
-        img.load()
-        return [img.convert("RGB")]
+        # Apply EXIF orientation (phone JPEGs) so Vision sees the page upright.
+        return [ImageOps.exif_transpose(img).convert("RGB")]
 
 
 def ocr_image(img: Image.Image) -> str:

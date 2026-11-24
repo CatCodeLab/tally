@@ -41,6 +41,10 @@ if __name__ == "__main__":
     mcd = receipt(MCD, LATIN)
     mcd.save(OUT / "mcd.png", optimize=True)
     pillow_heif.from_pillow(mcd).save(OUT / "mcd.heic", quality=60)
+    # Stored sideways with EXIF Orientation=6 (as a phone would); displays upright.
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    mcd.rotate(90, expand=True).save(OUT / "mcd_rotated.jpg", quality=80, exif=exif)
     receipt(ZH, pick_cjk()).save(OUT / "market_zh.png", optimize=True)
     pages = [mcd, receipt(OTHER, LATIN)]
     pages[0].save(OUT / "two_receipts.pdf", save_all=True, append_images=pages[1:], resolution=100)
