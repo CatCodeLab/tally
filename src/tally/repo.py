@@ -1,3 +1,4 @@
+import secrets
 import sqlite3
 from dataclasses import dataclass, fields
 from datetime import date
@@ -154,6 +155,20 @@ def set_setting(conn, key: str, value: str) -> None:
     conn.execute("INSERT INTO settings(key, value) VALUES (?, ?) "
                  "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
     conn.commit()
+
+
+TOKEN_KEY = "voice_token"
+
+
+def get_or_create_token(conn) -> str:
+    token = get_setting(conn, TOKEN_KEY)
+    return token if token else regenerate_token(conn)
+
+
+def regenerate_token(conn) -> str:
+    token = secrets.token_urlsafe(32)
+    set_setting(conn, TOKEN_KEY, token)
+    return token
 
 
 def is_processed(conn, h: str) -> bool:

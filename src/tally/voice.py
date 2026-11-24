@@ -19,8 +19,8 @@ class VoiceItem(BaseModel):
     id: str = Field(min_length=1, max_length=64)
     text: str = Field(min_length=1, max_length=500)
     captured_at: AwareDatetime
-    lat: float | None = None
-    lon: float | None = None
+    lat: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
+    lon: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
 
 
 class VoiceResult(BaseModel):
