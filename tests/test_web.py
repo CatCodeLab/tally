@@ -298,10 +298,21 @@ def test_concurrent_scan_refused(dash):
 def test_pairing_guide_escaped_and_host_checked(dash):
     r = dash.get("/pairing/guide")
     assert r.status_code == 200
-    assert "<pre" in r.text and "Authorization" in r.text
+    assert "Authorization" in r.text
     assert "<name>.local" not in r.text and "&lt;name&gt;.local" in r.text
+    # Rendered as formatted Markdown, not a raw text dump.
+    assert '<article class="guide">' in r.text
+    assert "<h2>" in r.text and "<ol>" in r.text and "<table>" in r.text
+    assert "\n## " not in r.text
     assert dash.get("/pairing/guide", headers={"Host": "evil.example"}).status_code == 400
     assert 'href="/pairing/guide"' in dash.get("/pairing").text
+
+
+def test_guide_markdown_never_passes_raw_html():
+    from tally.web.pages import render_markdown
+    html = render_markdown("# T\n\n<script>alert(1)</script>\n\n[x](javascript:alert(1))")
+    assert "<script>" not in html and "&lt;script&gt;" in html
+    assert 'href="javascript:' not in html
 
 
 def test_packaged_guide_matches_docs():

@@ -6,6 +6,8 @@ from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
+from markdown_it import MarkdownIt
+from markupsafe import Markup
 
 from tally import categories, dates, repo, report
 from tally.config import Config
@@ -20,6 +22,15 @@ PALETTE = ["#3b82f6", "#10b981", "#f59e0b", "#a78bfa", "#ef4444", "#14b8a6",
            "#ec4899", "#84cc16", "#6366f1", "#f97316", "#64748b"]
 STATUS_TABS = {"review": ("needs_review", "suspected_duplicate"),
                "card": ("card_skipped",)}
+
+
+# html=False: raw HTML in the Markdown is escaped, never passed through.
+# markdown-it also refuses javascript:/vbscript:/data: link targets by default.
+_MD = MarkdownIt("commonmark", {"html": False}).enable("table")
+
+
+def render_markdown(text: str) -> Markup:
+    return Markup(_MD.render(text))
 
 
 def _parse_date(s: str | None) -> date | None:
@@ -177,7 +188,8 @@ def register_pages(app: FastAPI, cfg: Config, templates) -> None:
 
     @app.get("/pairing/guide", response_class=HTMLResponse)
     def pairing_guide(request: Request):
-        # Packaged copy only, rendered as escaped text by Jinja autoescape.
-        guide = (Path(__file__).parent / "guide" / "shortcut-setup.md").read_text(encoding="utf-8")
+        # Packaged copy only; rendered Markdown with raw HTML escaped.
+        guide = render_markdown(
+            (Path(__file__).parent / "guide" / "shortcut-setup.md").read_text(encoding="utf-8"))
         with session(cfg) as conn:
             return render(request, conn, "guide.html", guide=guide)

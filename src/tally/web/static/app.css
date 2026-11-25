@@ -50,4 +50,4 @@ td.amt{text-align:right;font-variant-numeric:tabular-nums}
 .detail .media img{max-width:360px;max-height:520px;border:1px solid var(--line)}
 .kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px}
 .kv dd{margin:0;word-break:break-all}
-pre.guide{white-space:pre-wrap}
+.guide{max-width:760px;line-height:1.65;font-size:15px}.guide h1{font-size:24px;margin:8px 0 16px}.guide h2{font-size:19px;margin:32px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}.guide h3{font-size:16px;margin:22px 0 8px}.guide p,.guide ul,.guide ol{margin:0 0 12px}.guide li{margin:4px 0}.guide code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--line);border-radius:4px;padding:1px 5px}.guide pre{background:var(--line);border-radius:8px;padding:12px;overflow-x:auto}.guide pre code{background:none;padding:0}.guide blockquote{margin:0 0 12px;padding:8px 14px;border-left:3px solid var(--accent);color:var(--muted)}.guide table{border-collapse:collapse;margin:0 0 14px;display:block;overflow-x:auto}.guide th,.guide td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
