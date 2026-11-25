@@ -14,9 +14,12 @@ from tally.config import Config
 from tally.llm import ExtractionError, LLMClient
 from tally.money import to_cents
 from tally.ocr import SUPPORTED, load_pages, ocr_image
-from tally.verify import amount_in_text, sane_date
+from tally.verify import amount_in_text, cash_and_change, sane_date
 
 LOW_CONFIDENCE = 0.7
+# How far the model's total may be from (cash - change) before the receipt goes to review.
+# Covers penny rounding and similar adjustments.
+CASH_TOLERANCE_CENTS = 100
 
 
 @dataclass
@@ -60,14 +63,24 @@ def _build_entry(conn, llm: LLMClient, text: str, image_path: str, today: date,
         return _failed_entry("extraction_failed", today, image_path, text)
 
     cents = to_cents(f.total)
+    payment = f.payment_method
+    # CASH and CHANGE lines give the exact cash spent; prefer that over the model's total.
+    # The model often mistakes the CASH (tendered) line for the total.
+    cash_mismatch = False
+    if cc := cash_and_change(text):
+        cash, change = cc
+        paid = cash - change
+        cash_mismatch = (cents is not None and cents != cash
+                         and abs(cents - paid) > CASH_TOLERANCE_CENTS)
+        cents, payment = paid, "cash"
     d = sane_date(f.date, today)
     shop = (f.shop or "").strip() or None
     category = (repo.confirmed_category(conn, shop) if shop else None) or f.category
     e = repo.Entry(id=None, source="receipt", shop=shop, date=d or today,
                    amount_cents=cents or 0, category=cats.normalize(category, conn),
-                   payment_method=f.payment_method, image_path=image_path, ocr_text=text)
+                   payment_method=payment, image_path=image_path, ocr_text=text)
 
-    if f.payment_method == "card":
+    if payment == "card":
         e.status = "card_skipped"
     elif shop and cents and _is_duplicate(conn, shop, e.date, cents, pending):
         e.status = "suspected_duplicate"
@@ -75,7 +88,7 @@ def _build_entry(conn, llm: LLMClient, text: str, image_path: str, today: date,
         reason = None
         if cents is None:
             reason = "no_total"
-        elif not amount_in_text(cents, text):
+        elif cash_mismatch or (cc is None and not amount_in_text(cents, text)):
             reason = "amount_mismatch"
         elif shop is None:
             reason = "no_shop"

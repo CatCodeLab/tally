@@ -69,6 +69,35 @@ def run(env, fields, text="TOTAL 12.50"):
     return scan_inbox(env.conn, env.cfg, FakeLLM(fields), ocr=lambda i: text, today=D)
 
 
+COSTCO = ("COSTCO WHOLESALE\nSUBTOTAL 309.90\nTAX 12.46\nTOTAL\n"
+          "CASH 340.00\nPenny rounding 0.01\nCHANGE 17.65")
+
+
+def test_cash_minus_change_beats_cash_tendered(env):
+    # The real failure: TOTAL lost its number, so the model read CASH 340.00 as the total.
+    run(env, [ok_fields(shop="Costco", total="340.00")], text=COSTCO)
+    e = only_entry(env.conn)
+    assert (e.amount_cents, e.status, e.reason, e.payment_method) == (32235, "ok", None, "cash")
+
+
+def test_cash_minus_change_close_to_model_total_is_ok(env):
+    # Penny rounding: printed total 322.36, cash actually paid 322.35 -> record what was paid.
+    run(env, [ok_fields(shop="Costco", total="322.36")], text=COSTCO)
+    assert (only_entry(env.conn).amount_cents, only_entry(env.conn).status) == (32235, "ok")
+
+
+def test_cash_minus_change_disagreeing_with_model_goes_to_review(env):
+    run(env, [ok_fields(total="50.00")], text="TOTAL 50.00\nCASH 20.00\nCHANGE 7.50")
+    e = only_entry(env.conn)
+    assert (e.amount_cents, e.status, e.reason) == (1250, "needs_review", "amount_mismatch")
+
+
+def test_cash_and_change_lines_mean_cash_even_if_model_says_card(env):
+    r = run(env, [ok_fields(payment_method="card")], text="TOTAL 12.50\nCASH 20.00\nCHANGE 7.50")
+    e = only_entry(env.conn)
+    assert (r.card, e.status, e.payment_method) == (0, "ok", "cash")
+
+
 def test_happy_path(env):
     r = run(env, [ok_fields()])
     assert (r.added, r.review) == (1, 0)
