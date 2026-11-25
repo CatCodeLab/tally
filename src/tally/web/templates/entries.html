@@ -35,6 +35,11 @@
     <td class="amt">{{ money(e.amount_cents) }}</td>
     <td>{% if e.status != 'ok' %}<span class="badge">{{ t('status_' ~ e.status) }}</span>{% endif %}
         {% if e.reason %}<span class="muted">{{ reason_label(e.reason) }}</span>{% endif %}</td>
+    <td><form method="post" action="/entries/{{ e.id }}/delete" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="next" value="{{ here }}">
+      <button class="danger">{{ t('delete') }}</button>
+    </form></td>
   </tr>
   {% else %}
   <tr><td class="muted">{{ t('no_entries') }}</td></tr>

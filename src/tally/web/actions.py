@@ -72,13 +72,13 @@ def register_actions(app: FastAPI, cfg: Config, llm: LLMClient) -> None:
             return see_other("/entries?status=review")
 
     @app.post("/entries/{entry_id}/delete", dependencies=guard)
-    def delete_entry(entry_id: int):
+    def delete_entry(entry_id: int, next: str = Form("/entries?status=review")):
         with session(cfg) as conn:
             if repo.get_entry(conn, entry_id) is None:
                 raise HTTPException(404)
             repo.update_entry(conn, entry_id, status="deleted")
             flash(conn, "flash_deleted")
-            return see_other("/entries?status=review")
+            return see_other(safe_next(next, "/entries?status=review"))
 
     @app.post("/entries", dependencies=guard)
     def add_entry(shop: str = Form(""), date_: str = Form("", alias="date"),

@@ -150,6 +150,21 @@ def test_delete_hides_entry(dash, conn):
     assert dash.get(f"/entries/{eid}").status_code == 404
 
 
+def test_delete_from_entries_list_returns_to_same_list(dash, conn):
+    eid = add_entry(conn, mk(shop="Smith", amount_cents=0, status="needs_review",
+                             reason="no_amount", date=TODAY))
+    html = dash.get("/entries?status=review").text
+    assert f'action="/entries/{eid}/delete"' in html
+    r = post(dash, f"/entries/{eid}/delete", next="/entries?status=review")
+    assert r.status_code == 303 and r.headers["location"] == "/entries?status=review"
+    assert get_entry(conn, eid).status == "deleted"
+    assert "Smith" not in dash.get("/entries?status=review").text
+    # Off-site next is refused.
+    eid2 = add_entry(conn, mk(date=TODAY))
+    r = post(dash, f"/entries/{eid2}/delete", next="//evil.example")
+    assert r.headers["location"] == "/entries?status=review"
+
+
 def test_manual_add_and_withdrawal(dash, conn):
     post(dash, "/entries", shop="Kiosk", date=TODAY.isoformat(), amount="$1,234.50",
          category="food", next="/")
