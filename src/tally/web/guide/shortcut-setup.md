@@ -30,7 +30,13 @@ The Mac side never needs the internet. Only typed or dictated text (plus time an
    ```
 
    The same values are on the dashboard at http://127.0.0.1:8765/pairing. Treat the token like a password. `tally pair --regenerate` makes a new one (the old one stops working at once; update the Shortcut).
-4. On the iPhone, open **Settings > Privacy & Security > Local Network** after the first run and allow Shortcuts. If requests silently fail, check this first.
+4. **Allow Local Network access (do this once, after you finish building the Shortcut).** iOS makes every app ask before it can talk to devices on your Wi-Fi, such as your Mac.
+   1. While on home Wi-Fi, with `tally serve` running on the Mac, open the "Tally" Shortcut you just built and run it once. Say or type a throwaway entry such as `test 1`.
+   2. During that run iOS shows *"Shortcuts would like to find and connect to devices on your local network"*. Tap **Allow**.
+   3. If you missed or declined it, go to **Settings > Privacy & Security > Local Network** and switch **Shortcuts** on. Shortcuts only appears in that list after it has tried to reach the Mac once.
+   4. Delete the `test 1` entry on the dashboard (it is in the Review list).
+
+   If this permission is off, syncing fails without a clear error: you just hear "Sync failed" and the entries stay queued. Check it first.
 5. Open the Files app once and confirm **On My iPhone > Shortcuts** exists. If the folder is missing, run any Shortcut that saves a file and choose On My iPhone as the location (step 5 below creates it).
 
 ## The API in one place
@@ -172,6 +178,34 @@ Invalid items also count as success here: the reply has `results`, so the queue 
 
 1. Tap the Shortcut's name > **Add to Home Screen** (and/or assign it to the Action Button in Settings).
 2. Siri phrase: rename the Shortcut to `Tally 记一笔`. Siri runs a Shortcut by its name, so saying "Tally 记一笔" works. Add an English alias by duplicating the Shortcut as "Tally" if you want both phrases.
+
+## Everyday use
+
+There are no commands to type on the iPhone. You start the Shortcut, then say one short sentence.
+
+**Start it**, any of these:
+- Tap the **Tally** icon on the Home Screen.
+- Say **"Hey Siri, Tally 记一笔"**.
+- Press the Action Button, if you assigned it.
+
+**Then say (or type) the spending.** Amount is required; shop and date are optional:
+
+| You say | Recorded as |
+|---|---|
+| `40` | $40.00, shop from your location if you have paid there before, otherwise "Unknown shop" for review |
+| `菜市场 40` | 菜市场, $40.00, Groceries |
+| `McDonald's 12.50` | McDonald's, $12.50, Food |
+| `麦当劳 十二块五` | 麦当劳, $12.50 |
+| `昨天 UNIQLO 230` | UNIQLO, $230.00, dated yesterday |
+| `Costco 85 groceries` | Costco, $85.00, Groceries |
+
+Tips:
+- Keep it short: shop, amount, and optionally a day ("yesterday" / "昨天" / "前天").
+- At a place you visit often, just the amount is enough after the first time you name it.
+- Amounts over $500 always go to Review, in case dictation heard "12.50" as "1250".
+- Away from home you hear "Saved, will sync at home". The entry syncs the next time you run the Shortcut on home Wi-Fi.
+
+**On the Mac**, ATM withdrawals are recorded with `tally withdraw 200`, or on the dashboard.
 
 ## Privacy setup (spec section 5.7)
 
