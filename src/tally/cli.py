@@ -1,6 +1,4 @@
 import asyncio
-import socket
-import subprocess
 import webbrowser
 from datetime import date
 
@@ -9,6 +7,7 @@ import uvicorn
 
 from tally import categories, db, doctor, ingest, repo
 from tally.config import Config
+from tally.hostname import bonjour_hostname
 from tally.llm import LLMUnavailable, OllamaClient
 from tally.money import parse_amount
 from tally.voice_server import create_voice_app
@@ -155,22 +154,6 @@ def serve(no_voice: bool = typer.Option(False, "--no-voice"),
     except (RuntimeError, SystemExit) as e:
         typer.echo(f"Error: {e}")
         raise typer.Exit(1) from None
-
-
-def normalize_hostname(name: str) -> str:
-    """'Foo', 'Foo.local' or 'Foo.lan' -> 'Foo.local'."""
-    return name.strip().split(".")[0] + ".local"
-
-
-def bonjour_hostname() -> str:
-    try:
-        r = subprocess.run(["scutil", "--get", "LocalHostName"], capture_output=True,
-                           text=True, timeout=5)
-        if r.returncode == 0 and r.stdout.strip():
-            return normalize_hostname(r.stdout)
-    except (OSError, subprocess.SubprocessError):
-        pass
-    return normalize_hostname(socket.gethostname())
 
 
 @app.command()

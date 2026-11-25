@@ -195,11 +195,13 @@ def is_processed(conn, h: str) -> bool:
     return conn.execute("SELECT 1 FROM processed_files WHERE hash = ?", (h,)).fetchone() is not None
 
 
-def mark_processed(conn, h: str, name: str, commit: bool = True) -> None:
-    conn.execute("INSERT OR IGNORE INTO processed_files(hash, original_name) VALUES (?, ?)",
-                 (h, name))
+def mark_processed(conn, h: str, name: str, commit: bool = True) -> bool:
+    """Records the file hash; False if it was already recorded (e.g. by another scan)."""
+    cur = conn.execute("INSERT OR IGNORE INTO processed_files(hash, original_name) VALUES (?, ?)",
+                       (h, name))
     if commit:
         conn.commit()
+    return cur.rowcount == 1
 
 
 def count_by_status(conn, status: str) -> int:

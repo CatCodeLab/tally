@@ -1,7 +1,7 @@
 import re
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
-_AMOUNT = re.compile(r"^\$?\d{1,3}(,\d{3})+(\.\d+)?$|^\$?\d+(\.\d+)?$")
+_AMOUNT = re.compile(r"^\$?\d{1,3}(,\d{3})+(\.\d{1,2})?$|^\$?\d+(\.\d{1,2})?$")
 
 
 def parse_amount(s: str) -> int:

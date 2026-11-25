@@ -1,9 +1,9 @@
 """Voice entries: dictated utterance (+ optional GPS) -> verified entry."""
 import re
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AwareDatetime, BaseModel, Field, ValidationError
+from pydantic import AwareDatetime, BaseModel, Field, StringConstraints, ValidationError
 
 from tally import categories as cats
 from tally import repo
@@ -18,7 +18,7 @@ LARGE_CENTS = 50000  # over $500.00 in one cash purchase: ask the user to check
 
 class VoiceItem(BaseModel):
     id: str = Field(min_length=1, max_length=64)
-    text: str = Field(min_length=1, max_length=500)
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
     captured_at: AwareDatetime
     lat: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
     lon: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)

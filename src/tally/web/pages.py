@@ -1,5 +1,4 @@
 """Read-only dashboard pages (GET routes)."""
-import socket
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlencode
@@ -9,7 +8,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from markdown_it import MarkdownIt
 from markupsafe import Markup
 
-from tally import categories, dates, repo, report
+from tally import categories, dates, hostname, repo, report
 from tally.config import Config
 from tally.money import format_cents
 from tally.repo import Filters
@@ -181,7 +180,7 @@ def register_pages(app: FastAPI, cfg: Config, templates) -> None:
     @app.get("/pairing", response_class=HTMLResponse)
     def pairing(request: Request):
         with session(cfg) as conn:
-            host = socket.gethostname().removesuffix(".local") + ".local"
+            host = hostname.bonjour_hostname()
             return render(request, conn, "pairing.html", host=host, port=cfg.voice_port,
                           token=repo.get_or_create_token(conn),
                           ssid=repo.get_setting(conn, "home_ssid", "") or "")

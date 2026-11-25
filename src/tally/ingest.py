@@ -107,6 +107,7 @@ def _process_file(conn, llm: LLMClient, ocr, path: Path, h: str, out_dir: Path,
                   today: date, res: ScanResult) -> None:
     saved: list[Path] = []
     built: list[repo.Entry] = []
+    stored = False
     try:
         # Slow work first (render, OCR, LLM) with no write transaction open...
         for i, page in enumerate(load_pages(path)):
@@ -115,16 +116,21 @@ def _process_file(conn, llm: LLMClient, ocr, path: Path, h: str, out_dir: Path,
             saved.append(png)
             text = ocr(page)
             built.append(_build_entry(conn, llm, text, str(png), today, built))
-        # ...then one short transaction for the whole file.
-        for e in built:
-            repo.add_entry(conn, e, commit=False)
-        repo.mark_processed(conn, h, path.name, commit=False)
-        conn.commit()
-    except BaseException:
-        conn.rollback()
-        for p in saved:
-            p.unlink(missing_ok=True)
-        raise
+        # ...then one short transaction for the whole file. Claiming the hash first takes the
+        # write lock, so a scan in another process that got there first is seen here.
+        if repo.mark_processed(conn, h, path.name, commit=False):
+            for e in built:
+                repo.add_entry(conn, e, commit=False)
+            conn.commit()
+            stored = True
+    finally:
+        if not stored:
+            conn.rollback()
+            for p in saved:
+                p.unlink(missing_ok=True)
+    if not stored:  # no exception: another scan recorded this file first
+        res.skipped_files += 1
+        return
     counts = {"ok": 0, "needs_review": 0, "suspected_duplicate": 0, "card_skipped": 0}
     for e in built:
         counts[e.status] += 1
@@ -151,7 +157,8 @@ def scan_inbox(conn, cfg: Config, llm: LLMClient,
                 res.skipped_files += 1
             else:
                 _process_file(conn, llm, ocr, path, h, out_dir, today, res)
-            shutil.move(str(path), _unique_dest(out_dir, path.name))
+            if path.exists():  # a concurrent scan may already have archived it
+                shutil.move(str(path), _unique_dest(out_dir, path.name))
         except Exception as ex:
             res.errors.append(f"{path.name}: {ex}")
     return res

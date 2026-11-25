@@ -159,3 +159,18 @@ def test_all_duplicate_batch_has_nonempty_say(client, token):
     r = client.post("/api/voice", json={"items": [ITEM_A]}, headers=auth(token))
     assert r.status_code == 200 and r.json()["say"] == "Already synced"
     assert r.json()["results"][0]["status"] == "duplicate"
+
+
+def test_say_uses_last_stored_item_when_last_is_duplicate(client, token):
+    client.post("/api/voice", json={"items": [ITEM_B]}, headers=auth(token))
+    r = client.post("/api/voice", json={"items": [ITEM_A, ITEM_B]}, headers=auth(token))
+    assert [x["status"] for x in r.json()["results"]] == ["review", "duplicate"]
+    say = r.json()["say"]
+    assert say.startswith("Recorded") and "synced" not in say
+
+
+def test_say_uses_last_stored_item_when_last_is_invalid(client, token):
+    r = client.post("/api/voice", json={"items": [ITEM_A, {"id": "x"}]}, headers=auth(token))
+    assert [x["status"] for x in r.json()["results"]] == ["review", "invalid"]
+    say = r.json()["say"]
+    assert say.startswith("Recorded") and "synced" not in say

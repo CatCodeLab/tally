@@ -2,11 +2,11 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from tally.config import Config
 from tally.llm import LLMUnavailable, OllamaClient
 
-OLLAMA_PORT = 11434
 _LOOPBACK = {"127.0.0.1", "[::1]", "localhost"}
 _SYNCED_DIRS = ("Desktop", "Documents", "Library/Mobile Documents")
 
@@ -59,12 +59,16 @@ def _check_ollama(cfg: Config) -> Check:
 def _check_loopback_only(cfg: Config) -> Check:
     name = "Ollama listens on loopback only"
     try:
+        url = urlsplit(cfg.ollama_url)
+        if url.hostname not in ("127.0.0.1", "::1", "localhost"):
+            return Check(name, False, f"{cfg.ollama_url} is not on this Mac")
+        port = url.port or (443 if url.scheme == "https" else 80)
         # lsof exits 1 when nothing listens; treat that as empty output, not failure.
-        r = subprocess.run(["lsof", "-nP", f"-iTCP:{OLLAMA_PORT}", "-sTCP:LISTEN"],
+        r = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"],
                            capture_output=True, text=True, timeout=10)
         if r.returncode not in (0, 1):
             return Check(name, False, f"lsof exited {r.returncode}: {r.stderr.strip()[:100]}")
-        bad = non_loopback_listeners(r.stdout, OLLAMA_PORT)
+        bad = non_loopback_listeners(r.stdout, port)
         if bad:
             return Check(name, False, f"listening on {', '.join(bad)}")
         return Check(name, True, "only loopback" if r.stdout.strip() else "nothing listening")

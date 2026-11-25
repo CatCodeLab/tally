@@ -33,11 +33,15 @@ def _bearer(header: str | None) -> str | None:
     return parts[1]
 
 
-def _suffix(results: list[VoiceResult], lang: str) -> str:
-    n = sum(1 for r in results[:-1] if r.status in ("recorded", "review"))
-    if n == 0:
+def _batch_say(results: list[VoiceResult], lang: str) -> str:
+    """The last stored item's sentence, plus how many other items were stored."""
+    stored = [r for r in results if r.status in ("recorded", "review")]
+    if not stored:
         return ""
-    return f"（另同步 {n} 条）" if lang == "zh" else f" (+{n} synced)"
+    n = len(stored) - 1
+    if n == 0:
+        return stored[-1].say
+    return stored[-1].say + (f"（另同步 {n} 条）" if lang == "zh" else f" (+{n} synced)")
 
 
 def _process(cfg: Config, llm: LLMClient, token: str | None, batch: VoiceBatch | None):
@@ -90,7 +94,7 @@ def create_voice_app(cfg: Config, llm: LLMClient) -> FastAPI:
         if out is None:  # token rotated mid-request
             return unauthorized()
         results, lang = out
-        say = results[-1].say + _suffix(results, lang)
+        say = _batch_say(results, lang)
         if not say and all(r.status == "invalid" for r in results):
             say = "有记录无法识别" if lang == "zh" else "Some entries could not be read"
         elif not say:  # all-duplicate batch: give the phone something to speak

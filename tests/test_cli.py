@@ -81,19 +81,19 @@ def test_cli_doctor_exit_codes(runner, monkeypatch):
 
 
 def test_normalize_hostname():
-    from tally.cli import normalize_hostname
+    from tally.hostname import normalize_hostname
     assert normalize_hostname("Rans-Mac") == "Rans-Mac.local"
     assert normalize_hostname("Rans-Mac.local") == "Rans-Mac.local"
     assert normalize_hostname("Rans-Mac.lan\n") == "Rans-Mac.local"
 
 
 def test_bonjour_hostname_fallback(monkeypatch):
-    from tally import cli
+    from tally import hostname
     def boom(*a, **k):
         raise FileNotFoundError
-    monkeypatch.setattr(cli.subprocess, "run", boom)
-    monkeypatch.setattr(cli.socket, "gethostname", lambda: "box.local")
-    assert cli.bonjour_hostname() == "box.local"
+    monkeypatch.setattr(hostname.subprocess, "run", boom)
+    monkeypatch.setattr(hostname.socket, "gethostname", lambda: "box.local")
+    assert hostname.bonjour_hostname() == "box.local"
 
 
 def test_serve_exits_when_a_server_fails(tmp_config):

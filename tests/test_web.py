@@ -390,3 +390,9 @@ def test_large_amount_reason_label(dash, conn):
     assert "Unusually large amount" in dash.get("/entries?status=review").text
     dash.post("/lang", data={"lang": "zh", "csrf": csrf(dash)})
     assert "金额异常大" in dash.get("/entries?status=review").text
+
+
+def test_pairing_page_uses_bonjour_hostname(dash, monkeypatch):
+    from tally import hostname
+    monkeypatch.setattr(hostname, "bonjour_hostname", lambda: "Jess-MBP.local")
+    assert "Jess-MBP.local" in dash.get("/pairing").text

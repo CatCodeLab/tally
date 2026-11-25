@@ -55,3 +55,15 @@ def test_rejects_future_date():
     assert sane_date(date(2026, 11, 25), ref) == date(2026, 11, 25)
     assert sane_date(date(2026, 11, 26), ref) is None
     assert sane_date(None, ref) is None
+
+
+def test_cash_label_without_amount_does_not_hide_tender_line():
+    assert cash_paid("PAYMENT: CASH\nTOTAL 12.50\nCASH TEND 20.00\nCHANGE 7.50") == 1250
+    assert cash_paid("TENDER TYPE: CASH\nTOTAL 12.50\nCASH 20.00\nCHANGE 7.50") == 1250
+
+
+def test_cash_words_that_are_not_tender_are_ignored():
+    assert cash_paid("TOTAL 12.50\nCASH DISCOUNT 0.50\nCHANGE 0.00") is None
+    assert cash_paid("TOTAL 12.50\nCASH REWARDS 1.00\nCHANGE 0.00") is None
+    assert cash_paid("CASH DISCOUNT 0.50\nTOTAL 12.50\nCASH TEND 20.00\nCHANGE 7.50") == 1250
+    assert cash_paid("TOTAL 12.50\nCASH PAID 20.00\nCHANGE 7.50") == 1250

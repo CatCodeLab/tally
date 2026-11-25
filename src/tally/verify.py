@@ -7,8 +7,11 @@ _MIN_DATE = date(2000, 1, 1)
 
 _MONEY = re.compile(r"\d{1,3}(?:,\d{3})+\.\d{2}|\d+\.\d{2}")
 _ONLY_MONEY = re.compile(r"\s*\$?\s*(\d{1,3}(?:,\d{3})+\.\d{2}|\d+\.\d{2})\s*")
-# "CASH", "CASH TEND", "TENDERED", 现金, 实收 -- but never "CASH BACK" / "CASHBACK".
-_CASH = re.compile(r"\bCASH\b(?!\s*BACK)|\bTENDERED\b|现金|实收", re.IGNORECASE)
+# A tender line is only the label and (optionally) an amount: "CASH 20.00", "CASH TEND",
+# "CASH PAID", "TENDERED", 现金, 实收. Not "CASH BACK", "CASH DISCOUNT", "PAYMENT: CASH".
+_CASH = re.compile(r"^\s*(?:CASH(?:\s+(?:TEND(?:ERED)?|PAID))?|(?:AMOUNT\s+)?TENDERED|现金|实收)"
+                   r"\s*[:：]?\s*(?:\$?\s*(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2})?\s*$",
+                   re.IGNORECASE)
 _CHANGE = re.compile(r"\bCHANGE\b|找零|找赎|找续", re.IGNORECASE)
 
 
@@ -22,7 +25,7 @@ def amount_in_text(cents: int, text: str) -> bool:
 
 
 def _labelled_amount(lines: list[str], label: re.Pattern) -> int | None:
-    """Amount on the first line matching label, or on the next line if it holds only an amount."""
+    """Amount on the first matching line that has one, on it or alone on the next line."""
     for i, line in enumerate(lines):
         if not label.search(line):
             continue
@@ -31,7 +34,6 @@ def _labelled_amount(lines: list[str], label: re.Pattern) -> int | None:
             return _cents(found[-1])
         if i + 1 < len(lines) and (m := _ONLY_MONEY.fullmatch(lines[i + 1])):
             return _cents(m.group(1))
-        return None
     return None
 
 

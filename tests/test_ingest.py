@@ -277,3 +277,20 @@ def test_duplicate_pages_within_one_file_flagged(env):
     r = run(env, [ok_fields(), ok_fields()])
     assert sorted(e.status for e in entries(env.conn)) == ["ok", "suspected_duplicate"]
     assert (r.added, r.review) == (1, 1)
+
+
+def test_concurrent_scan_of_same_file_is_not_stored_twice(env):
+    # Another process records the same file while this one is still doing OCR.
+    other = db.connect(env.cfg.db_path)
+    h = __import__("hashlib").sha256((env.cfg.inbox / "a.png").read_bytes()).hexdigest()
+
+    def ocr(img):
+        mark_processed(other, h, "a.png")
+        return "TOTAL 12.50"
+
+    res = scan_inbox(env.conn, env.cfg, FakeLLM([ok_fields()]), ocr=ocr, today=D)
+    other.close()
+    assert entries(env.conn) == []
+    assert res.added == 0 and res.skipped_files == 1 and res.errors == []
+    out = env.cfg.archive / "2026" / "11"
+    assert not list(out.glob("*-p0.png"))  # rendered page of the discarded scan removed

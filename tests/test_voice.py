@@ -142,3 +142,9 @@ def test_two_amount_only_at_unnamed_point_reuse_one_place(conn):
     rows = conn.execute("SELECT id, shop, visits FROM places").fetchall()
     assert [(r["shop"], r["visits"]) for r in rows] == [(None, 2)]
     assert by_client_id(conn, "a").place_id == by_client_id(conn, "b").place_id == rows[0]["id"]
+
+
+def test_whitespace_only_text_is_invalid():
+    from tally.voice import VoiceResult, validate_item
+    r = validate_item({"id": "a", "text": "   ", "captured_at": "2026-11-24T10:00:00Z"})
+    assert isinstance(r, VoiceResult) and r.status == "invalid" and r.id == "a"
