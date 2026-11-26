@@ -1,0 +1,40 @@
+[project]
+name = "tally"
+version = "0.1.0"
+description = "Local cash spending tracker for macOS: receipts, voice notes and a private dashboard."
+readme = "README.md"
+authors = [
+    { name = "Jess Tao" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.165.0",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "markdown-it-py>=4.0",
+    "ocrmac>=1.0.1",
+    "pillow>=13.0.0",
+    "pillow-heif>=1.8.1",
+    "pydantic>=2.14.4",
+    "pypdfium2>=5.15.2",
+    "python-multipart>=0.0.34",
+    "typer>=0.29.2",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+tally = "tally.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.9.10,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]

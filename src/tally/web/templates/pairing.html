@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{{ t('pairing_title') }}</h2>
+<p>{{ t('pairing_intro') }}</p>
+<dl class="kv">
+  <dt>{{ t('mac_address') }}</dt><dd><code>{{ host }}</code></dd>
+  <dt>{{ t('port') }}</dt><dd><code>{{ port }}</code></dd>
+  <dt>{{ t('token') }}</dt><dd><code>{{ token }}</code></dd>
+</dl>
+<form method="post" action="/pairing/regenerate" class="inline">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button>{{ t('regenerate_token') }}</button> <span class="muted">{{ t('regenerate_warning') }}</span>
+</form>
+<form method="post" action="/pairing/ssid" class="grid">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label>{{ t('home_ssid') }} <input name="ssid" maxlength="64" value="{{ ssid }}"></label>
+  <button>{{ t('save_ssid') }}</button>
+</form>
+<p><a href="/pairing/guide">{{ t('setup_guide') }}</a></p>
+{% endblock %}

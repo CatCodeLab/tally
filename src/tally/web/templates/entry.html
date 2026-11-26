@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{{ t('entry_title') }} #{{ e.id }}</h2>
+{% if e.reason %}<p class="badge">{{ t('reason') }}: {{ reason_label(e.reason) }}</p>{% endif %}
+{% if e.status != 'ok' %}<p class="badge">{{ t('status_' ~ e.status) }}</p>{% endif %}
+{% if match %}<p><a href="/entries/{{ match.id }}">{{ t('duplicate_of').format(id=match.id) }}</a></p>{% endif %}
+<div class="detail">
+  <div class="media">
+    {% if e.image_path %}
+      <img src="/images/{{ e.id }}" alt="{{ t('receipt_image') }}">
+      <p><a href="/images/{{ e.id }}">{{ t('open_original') }}</a></p>
+    {% elif e.utterance %}
+      <h4>{{ t('utterance') }}</h4>
+      <blockquote>🎤 {{ e.utterance }}</blockquote>
+    {% endif %}
+  </div>
+  <div>
+    <form method="post" action="/entries/{{ e.id }}" class="grid">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>{{ t('shop') }} <input name="shop" maxlength="80" value="{{ e.shop or '' }}"></label>
+      <label>{{ t('date') }} <input type="date" name="date" value="{{ e.date.isoformat() if e.date }}" required></label>
+      <label>{{ t('amount') }} <input name="amount" inputmode="decimal" value="{{ '%.2f' % (e.amount_cents / 100) }}" required></label>
+      <label>{{ t('category') }} <select name="category">
+        {% for slug, name in category_options %}<option value="{{ slug }}" {{ 'selected' if slug == (e.category or 'other') }}>{{ name }}</option>{% endfor %}
+      </select></label>
+      {% if e.status == 'card_skipped' %}
+        <button class="primary">{{ t('not_card') }}</button>
+      {% elif e.status == 'suspected_duplicate' %}
+        <button class="primary">{{ t('not_duplicate') }}</button>
+      {% else %}
+        <button class="primary">{{ t('confirm') }}</button>
+      {% endif %}
+    </form>
+    <form method="post" action="/entries/{{ e.id }}/delete" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="danger">{{ t('delete') }}</button>
+    </form>
+    <p><a href="/entries?status=review">{{ t('back') }}</a></p>
+  </div>
+</div>
+{% endblock %}

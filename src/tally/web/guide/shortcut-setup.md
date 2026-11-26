@@ -1,0 +1,234 @@
+# iPhone Shortcut setup
+
+## 摘要（中文）
+
+Tally 的语音记账由一个手动搭建的 iPhone 快捷指令完成：你说或输入「40」或「Costco 40」，快捷指令把它连同时间和位置存进手机本地的 `queue.txt`（在「我的 iPhone」，不是 iCloud 云盘）。只有连上家里的 Wi-Fi 时才会把队列发给 Mac（`POST http://<主机名>.local:8766/api/voice`，请求头 `Authorization: Bearer <令牌>`），发送成功后才清空队列，并读出 Mac 返回的 `say`。不在家时只会提示「已暂存，回家后同步」。
+
+步骤：先在 Mac 上运行 `tally pair --ssid "家里Wi-Fi名"` 得到主机名、端口、令牌；再按下面 1–9 步在「快捷指令」App 里逐个添加操作；最后添加到主屏幕，并设置 Siri 短语「Tally 记一笔」。隐私：开启 FileVault，不要把 `~/Tally` 放进桌面/文稿（iCloud 同步文件夹），如果开了 iCloud 设备备份请开启「高级数据保护」。令牌等同于密码，不要截图外传。
+
+The rest of this document is in English.
+
+---
+
+## What this builds
+
+A Shortcut named "Tally" that you trigger by Siri, Home Screen icon or Action Button. It asks for an amount and shop (spoken or typed), stamps it with time and location, saves it to a queue file on the phone, and, only when the phone is on your home Wi-Fi, sends the whole queue to your Mac and clears it.
+
+The Mac side never needs the internet. Only typed or dictated text (plus time and optional coordinates) is sent to your Mac, never audio. iOS dictation itself may be processed by Apple depending on your device and language settings; type instead if that matters to you.
+
+## Prerequisites
+
+1. Mac and iPhone on the same home Wi-Fi.
+2. `tally serve` is running on the Mac (it also starts the voice endpoint on port 8766; do not pass `--no-voice`).
+3. Run `tally pair --ssid "YourHomeWiFiName"` on the Mac. It prints:
+
+   ```
+   Host: <name>.local
+   Port: 8766
+   Token: <long random token>
+   SSID: YourHomeWiFiName
+   ```
+
+   The same values are on the dashboard at http://127.0.0.1:8765/pairing. Treat the token like a password. `tally pair --regenerate` makes a new one (the old one stops working at once; update the Shortcut).
+4. **Allow Local Network access (do this once, after you finish building the Shortcut).** iOS makes every app ask before it can talk to devices on your Wi-Fi, such as your Mac.
+   1. While on home Wi-Fi, with `tally serve` running on the Mac, open the "Tally" Shortcut you just built and run it once. Say or type a throwaway entry such as `test 1`.
+   2. During that run iOS shows *"Shortcuts would like to find and connect to devices on your local network"*. Tap **Allow**.
+   3. If you missed or declined it, go to **Settings > Privacy & Security > Local Network** and switch **Shortcuts** on. Shortcuts only appears in that list after it has tried to reach the Mac once.
+   4. Delete the `test 1` entry on the dashboard (it is in the Review list).
+
+   If this permission is off, syncing fails without a clear error: you just hear "Sync failed" and the entries stay queued. Check it first.
+5. Open the Files app once and confirm **On My iPhone > Shortcuts** exists. If the folder is missing, run any Shortcut that saves a file and choose On My iPhone as the location (step 5 below creates it).
+
+## The API in one place
+
+```
+POST http://<LocalHostName>.local:8766/api/voice
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"items": [
+  {"id": "20261124101530123-48213",
+   "text": "Costco 40",
+   "captured_at": "2026-11-24T10:15:30-05:00",
+   "lat": 43.65, "lon": -79.38}
+]}
+```
+
+- The `Authorization` value is exactly `Bearer ` followed by the token: capital B, one space, no quotes. The scheme is case-sensitive.
+- `items`: 1 to 200 entries.
+- `id`: 1 to 64 characters, unique per capture. It makes retries safe: re-sending an id returns `duplicate` and creates nothing.
+- `text`: 1 to 500 characters.
+- `captured_at`: ISO 8601 **with a timezone offset** (`-05:00` or `Z`). A date without an offset is rejected.
+- `lat` / `lon`: optional. lat -90 to 90, lon -180 to 180. Leave the keys out when you have no location. Do not send empty strings.
+- Body limit 256 KB (413 beyond that). A long offline backlog must be sent in chunks (see step 7).
+- Response: JSON `{"results": [{"id", "status", "say"}, ...], "say": "..."}` where `status` is `recorded`, `review`, `duplicate` or `invalid`, and `say` is the sentence to speak.
+- Each item is checked on its own. An item that breaks the rules above (blank, text over 500 characters, missing or bad `captured_at`, out-of-range lat/lon, ...) gets status `invalid` and is **dropped**: the Mac does not store it and it is listed nowhere, not even on the dashboard. The rest of the batch is still recorded and the reply is still `200`, so one bad item never blocks the queue. Keep dictations short. If every item is invalid, `say` is "Some entries could not be read".
+- `401` bad or missing token. `422` bad envelope (no `items` list, or 0 or more than 200 items). Any other path or method returns `404`.
+
+Important: the Shortcuts "Get Contents of URL" action does **not** fail on a 401 or 422; it just hands back the error body. That is why step 8 checks for `results` instead of trusting that "no error means success".
+
+## Build the Shortcut
+
+Open Shortcuts, tap **+**, and name it **Tally**. Add these actions in order. Action names below are as they appear in the current Shortcuts app; Apple renames things between iOS versions, so use the search box if one is not where described.
+
+### 1. Pairing values: Text
+
+Add four **Text** actions, each followed by **Set Variable**, so they are easy to edit later:
+
+| Variable | Text |
+|---|---|
+| `Host` | `<name>.local` (from `tally pair`) |
+| `Port` | `8766` |
+| `Token` | the token |
+| `HomeSSID` | your home Wi-Fi name, exactly as shown in Settings (case-sensitive) |
+
+### 2. Ask for Input
+
+**Ask for Input**: Input Type **Text**, Prompt `Amount / shop? 金额 / 商店？`. Leave "Allow Multiple Lines" off. Tapping the microphone on the keyboard gives dictation, so the same action covers speaking and typing. Under Siri it is read aloud and the answer is dictated. Then **Set Variable** `Spoken` to *Provided Input*.
+
+The server accepts things like `40`, `$40`, `Costco 40` and free phrases; a bare number becomes an "Unknown shop" entry for you to name on the dashboard.
+
+### 3. Location (needs permission)
+
+1. **Get Current Location**.
+2. **Get Details of Locations**: Get **Latitude**, then **Set Variable** `Lat`. Add another **Get Details of Locations** (input: the location) for **Longitude** and **Set Variable** `Lon`.
+
+Honest limit: Shortcuts has no try/catch, so there is **no automatic fallback** if location fails. If Shortcuts does not have location permission (or Location Services is off, or no fix is available), **Get Current Location** stops the whole run before anything is saved, and that capture is lost. Prevent this by granting Shortcuts location access ("While Using the App" or "Always", with Precise Location on) in Settings > Privacy & Security > Location Services > Shortcuts, and run the Shortcut once to accept the prompt. If you cannot or do not want location, use the "Tally (no location)" variant described under Troubleshooting.
+
+### 4. Build the entry (Dictionary)
+
+First compute the id and time:
+
+1. **Current Date**, then **Format Date**: Date Format **Custom**, format string `yyyyMMddHHmmssSSS`. **Set Variable** `Stamp`.
+2. **Random Number** between `1` and `999999`. **Set Variable** `Rand`.
+3. **Current Date**, then **Format Date**: Date Format **ISO 8601**. Set Variable `When`. Run it once with **Show Result**: it must look like `2026-11-24T10:15:30-05:00` (an offset or `Z` at the end). If it has no offset, use Custom format `yyyy-MM-dd'T'HH:mm:ssxxx` instead.
+4. **Combine Text** is not needed: in the Dictionary, the id value is a **Text** field containing the `Stamp` variable, a hyphen, and the `Rand` variable.
+
+Then, to avoid sending empty lat/lon (the Mac would reject that item as `invalid` and drop it), use an **If**:
+
+- **If** `Lat` **has any value**:
+  - **Dictionary** with keys: `id` (Text: `Stamp-Rand`), `text` (Text: `Spoken`), `captured_at` (Text: `When`), `lat` (**Number**: `Lat`), `lon` (**Number**: `Lon`). **Set Variable** `Entry`.
+- **Otherwise**:
+  - **Dictionary** with the first three keys only. **Set Variable** `Entry`.
+- **End If**
+
+### 5. Append to the queue (On My iPhone, not iCloud)
+
+Goal: one JSON object per line in `On My iPhone > Shortcuts > queue.txt`.
+
+1. Make the entry a single line of text. Add a **Text** action containing just the `Entry` variable. Shortcuts renders a dictionary placed in Text as JSON, but it is usually pretty-printed over many lines. Add **Replace Text**: Find `\s*\n\s*`, Replace With a single space, with **Regular Expression** turned on. Run once with **Show Result** to confirm the output is one line of valid JSON. (JSON escapes newlines inside strings, so replacing real line breaks is safe.) **Set Variable** `Line`.
+2. **Get File**: choose **Shortcuts** under **On My iPhone** (not iCloud Drive) and the file `queue.txt`; turn **Error If Not Found** off. **Set Variable** `OldQueue`.
+3. **If** `OldQueue` **has any value**: **Text** = `OldQueue`, a new line, `Line`; **Otherwise**: **Text** = `Line`. Set Variable `NewQueue`.
+4. **Save File**: input `NewQueue`; turn **Ask Where to Save** **off**; destination folder **Shortcuts** under **On My iPhone**; Subpath `queue.txt`; **Overwrite If File Exists** **on**.
+
+The first time you run this, the destination picker lets you choose the location. Pick **On My iPhone**, then the **Shortcuts** folder. Do not pick iCloud Drive: the queue holds your spending, location and the time of each capture.
+
+There is also an **Append to Text File** action that does steps 2 to 4 in one go. Use it if, when you tap its file chooser, you can select a file under **On My iPhone**. It is not certain it offers that location on every iOS version (it tends to default to iCloud Drive's Shortcuts folder), which is why the Get File + Save File recipe above is the safe default.
+
+After this step the entry is on the phone, so nothing is lost if the next steps fail.
+
+### 6. Home Wi-Fi check
+
+1. **Get Network Details**: **Wi-Fi** > **Network Name**. Set Variable `Net`. (Needs Location permission; iOS hides the SSID without it. On cellular this gives nothing.)
+2. **If** `Net` **is not** `HomeSSID`:
+   - **Show Result** (or **Speak Text**): `Saved, will sync at home / 已暂存，回家后同步`
+   - **Stop This Shortcut**.
+3. **End If**
+
+### 7. Read the queue and send it
+
+1. **Get File** `queue.txt` from **On My iPhone > Shortcuts** (same as step 5.2), then **Get Text from Input**.
+2. **Split Text** by **New Lines**. Set Variable `Lines`.
+3. Chunking. The server accepts at most 200 items (and 256 KB) per request; more gets a 422. Normally you have a handful, so you can skip the range steps and just **Set Variable** `Batch` to `Lines`. To be safe with a big backlog, send at most 200 lines per run: **Get Items from List** on `Lines` with the range **1 to 200** (wording varies by iOS; if you cannot express a range, use the simple rule below). Set that as `Batch`. Also make `Rest` = **Get Items from List** range **201 to the end**, used in step 8. Simple rule if you skip this: if you have more than 200 queued entries, trim `queue.txt` by hand in Files, or run the Shortcut again after each sync once you have added the range steps.
+4. **Repeat with Each** item in `Batch`, skipping blank lines (a trailing new line in the file gives an empty last line):
+   - **If** *Repeat Item* **has any value**:
+     - **Get Dictionary from Input** (input: *Repeat Item*).
+     - **Add to Variable** `Items`.
+   - **End If**
+   - **End Repeat**
+5. **Get Contents of URL**:
+   - URL: `http://` `Host` `:` `Port` `/api/voice`
+   - Method **POST**
+   - Headers: `Authorization` = `Bearer ` followed by `Token` (one space after Bearer; do not wrap in quotes). `Content-Type` is set by the JSON body automatically.
+   - Request Body **JSON**: add one field, key `items`, type **Array** (or List), value the `Items` variable.
+6. **Set Variable** `Response`.
+
+If the JSON body editor will not accept a variable as the whole array, use this fallback instead of 4 and the JSON body: **Repeat with Each** item in `Batch`: **If** *Repeat Item* **has any value**, **Add to Variable** `Clean`; **End If**; **End Repeat** (this skips blank lines). Then **Combine Text** `Clean` with custom separator `,`; **Text** = `{"items":[` + that + `]}`; in Get Contents of URL set Request Body **File** with that text, and add the header `Content-Type: application/json` yourself.
+
+### 8. Clear the queue only on success, then speak
+
+Remember: a 401 or 422 does not raise an error, so test the reply instead of assuming. A successful reply always has a `results` list; error replies only have `detail`. (`say` can be an all-duplicate "Already synced", but success is judged by `results`, not by `say`.)
+
+1. **Get Dictionary Value**: key `results`, from `Response`. Set Variable `Results`. Also **Get Dictionary Value** key `say` from `Response`, Set Variable `Say`.
+2. **If** `Results` **has any value**:
+   - Without chunking: **Get File** `queue.txt` from **On My iPhone > Shortcuts** (Error If Not Found off), then **Delete Files** with that file as input, **Confirm Before Deleting** off. Step 5 creates a fresh `queue.txt` next time. (Do not save an empty text instead: that leaves a blank line that later runs would have to skip.)
+   - If you chunked in step 7.3: **If** `Rest` **has any value**: **Combine Text** `Rest` with **New Lines**, then **Save File** to **On My iPhone > Shortcuts**, Subpath `queue.txt`, **Overwrite If File Exists** on, Ask Where to Save off. **Otherwise**: delete `queue.txt` as above. **End If**
+   - **Speak Text** `Say`.
+3. **Otherwise**:
+   - **Speak Text**/**Show Result**: `Sync failed, items kept / 同步失败，已保留`. Do not touch the queue.
+4. **End If**
+
+If the phone cannot reach the Mac at all (Mac asleep, wrong host, Local Network blocked), **Get Contents of URL** raises an error and the Shortcut stops before this step, so the queue is also kept. Ids make re-sending safe: a retry after a half-finished sync returns `duplicate` for items the Mac already has and never double-counts.
+
+Edge case: if the Mac recorded your items but the phone lost the response (Wi-Fi dropped), the queue stays. The next sync reports them all as `duplicate`, the reply still has `results` (and says "Already synced"), so the queue clears. That is expected.
+
+Invalid items also count as success here: the reply has `results`, so the queue is cleared and those items are gone for good (the Mac drops them and lists them nowhere). That is what keeps one broken line from blocking every later sync. Keep each dictation short (500 characters at most).
+
+### 9. Home Screen and Siri
+
+1. Tap the Shortcut's name > **Add to Home Screen** (and/or assign it to the Action Button in Settings).
+2. Siri phrase: rename the Shortcut to `Tally 记一笔`. Siri runs a Shortcut by its name, so saying "Tally 记一笔" works. Add an English alias by duplicating the Shortcut as "Tally" if you want both phrases.
+
+## Everyday use
+
+There are no commands to type on the iPhone. You start the Shortcut, then say one short sentence.
+
+**Start it**, any of these:
+- Tap the **Tally** icon on the Home Screen.
+- Say **"Hey Siri, Tally 记一笔"**.
+- Press the Action Button, if you assigned it.
+
+**Then say (or type) the spending.** Amount is required; shop and date are optional:
+
+| You say | Recorded as |
+|---|---|
+| `40` | $40.00, shop from your location if you have paid there before, otherwise "Unknown shop" for review |
+| `菜市场 40` | 菜市场, $40.00, Groceries |
+| `McDonald's 12.50` | McDonald's, $12.50, Food |
+| `麦当劳 十二块五` | 麦当劳, $12.50 |
+| `昨天 UNIQLO 230` | UNIQLO, $230.00, dated yesterday |
+| `Costco 85 groceries` | Costco, $85.00, Groceries |
+
+Tips:
+- Keep it short: shop, amount, and optionally a day ("yesterday" / "昨天" / "前天").
+- At a place you visit often, just the amount is enough after the first time you name it.
+- Amounts over $500 always go to Review, in case dictation heard "12.50" as "1250".
+- Away from home you hear "Saved, will sync at home". The entry syncs the next time you run the Shortcut on home Wi-Fi.
+
+**On the Mac**, ATM withdrawals are recorded with `tally withdraw 200`, or on the dashboard.
+
+## Privacy setup (spec section 5.7)
+
+- Turn on **FileVault** (System Settings > Privacy & Security > FileVault). The database and receipts are only as private as the disk.
+- Keep `~/Tally` out of **Desktop** and **Documents**. If iCloud Drive's "Desktop & Documents Folders" is on, anything there is uploaded. The default `~/Tally` in your home folder is not synced; if you set `TALLY_HOME`, keep it outside those folders too.
+- If **iCloud device backup** is on, turn on **Advanced Data Protection** so backups (which include the phone's local files) are end-to-end encrypted.
+- The queue file lives in **On My iPhone**, not iCloud Drive, so it is not synced between devices.
+- The Shortcut only sends when the Wi-Fi name matches `HomeSSID`. The voice port (8766) is the only thing exposed to the LAN; the dashboard (8765) listens on 127.0.0.1 only.
+- The queue is cleared after a successful sync.
+- Anyone on your Wi-Fi who learns the token can post entries. Rotate it with `tally pair --regenerate` if it leaks.
+
+## Test it
+
+1. On home Wi-Fi, run the Shortcut and say "40". You should hear "Recorded: Unknown shop $40.00, ... please check", and an "Unknown shop" entry appears under Review on the dashboard.
+2. Name the shop on the dashboard, then say "12" again at the same place; the shop is filled in automatically.
+3. Turn Wi-Fi off. Run it: it says "Saved, will sync at home". Come home, run it again: both items sync and `queue.txt` is gone afterward (check in Files).
+4. Run it again right away: no duplicates appear.
+
+## Troubleshooting
+
+- Location problems or you want a text-only entry: Shortcuts cannot recover from a location failure mid-run. Make a second Shortcut: duplicate "Tally", rename it "Tally (no location)", delete step 3, and in step 4 keep only the Otherwise branch (the dictionary without `lat` / `lon`). Add it to the Home Screen next to the main one and use it when location is unavailable.
+
+- Nothing arrives: open `http://<name>.local:8766/api/voice` in Safari; a `404` page means the server is reachable (GET is deliberately not allowed). A timeout means the Mac is asleep, `tally serve` is not running, or Local Network access is off.
+- `.local` does not resolve: use the Mac's IP address in `Host` instead (set a DHCP reservation so it does not change).
+- Always says "Sync failed": token mismatch (401) or a malformed request (422, e.g. more than 200 items). Show the `Response` with **Show Result**.
+- `tally doctor` checks the Mac side.
